@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#171712" />
+  <title>AlpenFinder</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <div><strong>AlpenFinder</strong><span>Grundstücks-Scout</span></div>
+    <button id="locateBtn" class="secondary">Mein Standort</button>
+  </header>
+  <main>
+    <section class="mapWrap">
+      <div id="map"></div>
+      <div class="searchBox">
+        <input id="searchInput" placeholder="Ort, Hof oder Adresse suchen" />
+        <button id="searchBtn">Suchen</button>
+      </div>
+      <div class="hint">Auf die Karte tippen, um einen Standort zu prüfen.</div>
+    </section>
+    <section class="panel" id="panel">
+      <div class="panelHead"><h1>Standortprüfung</h1><button id="closePanel" class="ghost">×</button></div>
+      <p id="coords" class="muted">Noch kein Standort ausgewählt.</p>
+      <div class="actions">
+        <button id="analyzeBtn" disabled>Standort analysieren</button>
+        <button id="routeBtn" class="secondary" disabled>Anfahrt prüfen</button>
+        <button id="saveBtn" class="secondary" disabled>Favorit speichern</button>
+      </div>
+      <div id="status" class="status"></div>
+      <div id="score" class="score hidden"></div>
+      <div id="results" class="cards"></div>
+      <div id="routeResult" class="cards"></div>
+      <details>
+        <summary>Bewertungskriterien anpassen</summary>
+        <label>Max. Hangneigung <output id="slopeOut">20°</output><input id="slopeMax" type="range" min="5" max="40" value="20" /></label>
+        <label>Max. Entfernung zur Straße <output id="roadOut">150 m</output><input id="roadMax" type="range" min="25" max="1000" step="25" value="150" /></label>
+        <label>Gewünschte Ausrichtung
+          <select id="aspectPref"><option value="S">Süd</option><option value="SW">Südwest</option><option value="SE">Südost</option><option value="ANY">egal</option></select>
+        </label>
+      </details>
+      <div class="favorites"><h2>Favoriten</h2><div id="favorites"></div></div>
+      <p class="disclaimer">Vorprüfung, keine rechtliche, bauliche oder sicherheitstechnische Zusage. Zufahrtsrechte, Winterdienst, Naturgefahren, Wasser und Bebaubarkeit müssen vor Ort und amtlich geprüft werden.</p>
+    </section>
+  </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
