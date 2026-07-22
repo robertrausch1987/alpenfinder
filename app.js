@@ -35,12 +35,14 @@ let userLocationLayer = null;
 let routeLayer = null;
 let activeDrawer = null;
 let activeSuggestionPlace = '';
+let lastAnalysis = null;
 
 const $ = id => document.getElementById(id);
 const status = $('status');
 const results = $('results');
 const routeResult = $('routeResult');
 const LEARNING_KEY = 'alpenLearningProfile';
+const PROPERTY_KEY = 'alpenProperties';
 
 const areaStyle = {
   color: '#171712',
@@ -724,7 +726,7 @@ function bindLearningControls(placeLabel) {
   saveButton.onclick = () => {
     const entry = {
       title: $('feedbackTitle').value.trim(),
-      url: $('feedbackUrl').value.trim(),
+      url: normalizeExternalUrl($('feedbackUrl').value),
       fit: $('feedbackFit').value,
       comment: comment.value.trim(),
       place: activeSuggestionPlace,
@@ -782,6 +784,182 @@ function renderLearningSummary() {
   `;
 }
 
+function parsePrice(value) {
+  const cleaned = String(value || '').replace(/[^\d]/g, '');
+  return cleaned ? Number(cleaned) : null;
+}
+
+function normalizeExternalUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '';
+  } catch (error) {
+    try {
+      const parsed = new URL(`https://${raw}`);
+      return parsed.hostname.includes('.') ? parsed.href : '';
+    } catch (innerError) {
+      return '';
+    }
+  }
+}
+
+function profileFitFromText(text) {
+  const words = String(text || '').toLowerCase();
+  let score = 0;
+  const positives = ['hof', 'bauernhaus', 'scheune', 'stall', 'nebeng', 'panorama', 'bergblick', 'alleinlage', 'ruhig', 'wald', 'quelle', 'bach', 'sanierung', 'historisch', 'alt'];
+  const negatives = ['luxus', 'villa', 'penthouse', 'neubau', 'designer', 'prestige', 'stadtwohnung'];
+  positives.forEach(term => {
+    if (words.includes(term)) score += 4;
+  });
+  negatives.forEach(term => {
+    if (words.includes(term)) score -= 8;
+  });
+  return Math.max(-20, Math.min(30, score));
+}
+
+function scoreImportedProperty(property) {
+  const analysis = property.analysis || {};
+  const geoScore = Number.isFinite(analysis.score) ? analysis.score : 45;
+  const textScore = profileFitFromText(`${property.title} ${property.address} ${property.notes}`);
+  const price = property.price;
+  const priceSignal = price == null ? 0 : price < 1200000 ? 8 : price < 2200000 ? 2 : -8;
+  const dataPenalty = property.url ? 0 : -6;
+  const score = Math.round(Math.max(0, Math.min(100, geoScore * 0.62 + 22 + textScore + priceSignal + dataPenalty)));
+  const strengths = [];
+  const risks = [];
+  const next = [];
+
+  if (geoScore >= 70) strengths.push('starke Standortvorprüfung');
+  if (analysis.winter >= 5) strengths.push('brauchbare Wintersonne');
+  if (analysis.waterHint) strengths.push('Wasserhinweis in der Nähe');
+  if (textScore > 8) strengths.push('Beschreibung passt zum Refugium-Profil');
+  if (price != null && price < 1200000) strengths.push('Preis wirkt prüfenswert');
+  if (analysis.slope > Number($('slopeMax').value)) risks.push('Hangneigung prüfen');
+  if (analysis.road == null) risks.push('Zufahrt/Wegerecht unklar');
+  if (!property.url) risks.push('Angebotsquelle fehlt');
+  if (price == null) risks.push('Preis fehlt');
+  if (!property.address) risks.push('Adresse/Lage nur grob');
+
+  next.push('Angebot manuell gegen Originalquelle prüfen');
+  next.push('Flurstück/Katasterdaten legal ermitteln');
+  next.push('Baurecht und Widmung fachlich prüfen');
+  next.push('Sanierungs- und Erschließungsaufwand schätzen');
+
+  return {
+    total: score,
+    dataQuality: Math.max(25, Math.min(90, 42 + (property.url ? 15 : 0) + (property.address ? 12 : 0) + (price != null ? 10 : 0) + (analysis.score ? 11 : 0))),
+    strengths: strengths.length ? strengths : ['erste Vorqualifizierung möglich'],
+    risks: risks.length ? risks : ['keine harten Dealbreaker aus dem Prototyp erkennbar'],
+    next
+  };
+}
+
+function currentTargetSnapshot() {
+  if (!selected) return null;
+  return {
+    type: selected.type,
+    lat: selected.lat,
+    lng: selected.lng,
+    label: selected.label
+  };
+}
+
+function saveImportedProperty() {
+  const title = $('listingTitle').value.trim();
+  const url = normalizeExternalUrl($('listingUrl').value);
+  const price = parsePrice($('listingPrice').value);
+  const address = $('listingAddress').value.trim();
+  const notes = $('listingNotes').value.trim();
+
+  if (!title && !url) {
+    status.textContent = 'Bitte mindestens Titel oder Angebotslink eintragen.';
+    return;
+  }
+  if (!selected) {
+    status.textContent = 'Bitte zuerst einen Standort oder ein Suchgebiet wählen.';
+    return;
+  }
+
+  const property = {
+    id: `prop-${Date.now()}`,
+    kind: 'market_listing',
+    stage: 'auto_scored',
+    title: title || 'Öffentliches Angebot',
+    url,
+    price,
+    address,
+    notes,
+    profile: currentProfile(),
+    target: currentTargetSnapshot(),
+    analysis: lastAnalysis,
+    createdAt: new Date().toISOString()
+  };
+  property.score = scoreImportedProperty(property);
+
+  const properties = readJson(PROPERTY_KEY, []);
+  properties.unshift(property);
+  writeJson(PROPERTY_KEY, properties.slice(0, 80));
+  $('listingTitle').value = '';
+  $('listingUrl').value = '';
+  $('listingPrice').value = '';
+  $('listingAddress').value = '';
+  $('listingNotes').value = '';
+  renderProperties();
+  status.textContent = 'Objekt bewertet und gespeichert.';
+}
+
+function propertyCard(property) {
+  const price = property.price == null ? 'Preis offen' : `${property.price.toLocaleString('de-DE')} €`;
+  const source = property.url ? `<a target="_blank" rel="noopener" href="${escapeHtml(property.url)}">Quelle öffnen</a>` : '<span>Quelle fehlt</span>';
+  return `<div class="propertyCard">
+    <div class="cardRow"><strong>${escapeHtml(property.title)}</strong><span class="badge ${property.score.total >= 75 ? 'good' : property.score.total >= 55 ? 'warn' : 'bad'}">${property.score.total}/100</span></div>
+    <div class="muted">${escapeHtml(property.address || property.target?.label || 'Lage offen')} · ${escapeHtml(price)} · Datenqualität ${property.score.dataQuality}/100</div>
+    <div class="propertyMeta">${source}<span>${escapeHtml(property.stage)}</span></div>
+    <div class="miniList"><strong>Stärken</strong>${property.score.strengths.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>
+    <div class="miniList"><strong>Risiken/offen</strong>${property.score.risks.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>
+    <div class="propertyActions">
+      <button type="button" onclick="markProperty('${property.id}','interesting')">Interessant</button>
+      <button type="button" class="secondary" onclick="markProperty('${property.id}','manual_review')">Prüfen</button>
+      <button type="button" class="secondary" onclick="markProperty('${property.id}','rejected')">Verwerfen</button>
+    </div>
+  </div>`;
+}
+
+function renderProperties() {
+  const target = $('properties');
+  if (!target) return;
+  const properties = readJson(PROPERTY_KEY, []);
+  target.innerHTML = properties.length
+    ? properties.map(propertyCard).join('')
+    : '<div class="muted">Noch keine Objektkandidaten gespeichert.</div>';
+}
+
+window.markProperty = (id, stage) => {
+  const properties = readJson(PROPERTY_KEY, []);
+  const property = properties.find(item => item.id === id);
+  if (!property) return;
+  property.stage = stage;
+  property.updatedAt = new Date().toISOString();
+  writeJson(PROPERTY_KEY, properties);
+  if (stage === 'interesting') {
+    applyFeedbackLearning({
+      title: property.title,
+      url: property.url,
+      fit: 'positive',
+      comment: `${property.notes} unbedingt weiterverfolgen`,
+      place: property.target?.label || '',
+      target: property.target,
+      date: new Date().toISOString()
+    });
+    status.textContent = 'Objekt als interessant markiert. Lernprofil aktualisiert.';
+  } else {
+    status.textContent = `Objektstatus aktualisiert: ${stage}.`;
+  }
+  renderProperties();
+};
+
 async function analyzeSamples(samplePoints, center, radius, label, areaDescription = '') {
   const terrainResults = await Promise.allSettled(
     samplePoints.map(point => elevations(destinationSamples(point[0], point[1])))
@@ -824,6 +1002,22 @@ async function analyzeSamples(samplePoints, center, radius, label, areaDescripti
   score += aspectPref === 'ANY' ? 15 : (primaryAspect.name.includes(aspectPref) || primaryAspect.name === aspectPref ? 15 : 5);
   score += buildings ? 10 : 3;
   score = Math.round(Math.min(100, score));
+  lastAnalysis = {
+    score,
+    label,
+    areaDescription,
+    elevation: avgElevation,
+    slope: avgSlope,
+    aspect: primaryAspect.name,
+    aspectDeg: primaryAspect.deg,
+    road,
+    waterHint: spring != null ? 'spring' : water != null ? 'waterway' : '',
+    buildings,
+    winter,
+    summer,
+    mapDetailsAvailable,
+    analyzedAt: new Date().toISOString()
+  };
 
   $('score').innerHTML = `<div><div>Gesamteignung</div><small>${escapeHtml(label)}</small></div><strong>${score}/100</strong>`;
   $('score').classList.remove('hidden');
@@ -1007,7 +1201,9 @@ $('clearLearningBtn').onclick = () => {
   refreshPropertySources();
   status.textContent = 'Lernprofil zurückgesetzt.';
 };
+$('saveListingBtn').onclick = saveImportedProperty;
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 renderLearningSummary();
 renderFavorites();
+renderProperties();

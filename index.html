@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-  <link rel="stylesheet" href="styles.css?v=20260722-refuge" />
+  <link rel="stylesheet" href="styles.css?v=20260722-e2e" />
 </head>
 <body>
   <header>
@@ -43,6 +43,16 @@
       <div id="score" class="score hidden"></div>
       <div id="results" class="cards"></div>
       <div id="routeResult" class="cards"></div>
+      <details>
+        <summary>Öffentliches Objekt aufnehmen</summary>
+        <label>Titel <input id="listingTitle" placeholder="z. B. Alter Hof mit Nebengebäude" /></label>
+        <label>Link zum Angebot <input id="listingUrl" inputmode="url" placeholder="https://..." /></label>
+        <label>Preis <input id="listingPrice" inputmode="numeric" placeholder="z. B. 850000" /></label>
+        <label>Adresse / Ort <input id="listingAddress" placeholder="falls im Angebot sichtbar" /></label>
+        <label>Notizen <textarea id="listingNotes" rows="3" placeholder="Was fällt auf? Panorama, Zustand, Nebengebäude, Risiken..."></textarea></label>
+        <button id="saveListingBtn" type="button">Objekt bewerten und speichern</button>
+      </details>
+      <div class="properties"><h2>Objektkandidaten</h2><div id="properties"></div></div>
       <details>
         <summary>Bewertungskriterien anpassen</summary>
         <label>Max. Hangneigung <output id="slopeOut">20°</output><input id="slopeMax" type="range" min="5" max="40" value="20" /></label>
@@ -82,6 +92,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
-  <script src="app.js?v=20260722-refuge"></script>
+  <script src="app.js?v=20260722-e2e"></script>
 </body>
 </html>
