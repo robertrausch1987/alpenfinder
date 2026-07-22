@@ -34,11 +34,13 @@ let userLocation = null;
 let userLocationLayer = null;
 let routeLayer = null;
 let activeDrawer = null;
+let activeSuggestionPlace = '';
 
 const $ = id => document.getElementById(id);
 const status = $('status');
 const results = $('results');
 const routeResult = $('routeResult');
+const LEARNING_KEY = 'alpenLearningProfile';
 
 const areaStyle = {
   color: '#171712',
@@ -55,6 +57,34 @@ function escapeHtml(value) {
     '"': '&quot;',
     "'": '&#39;'
   })[char]);
+}
+
+function readJson(key, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
+  } catch (error) {
+    console.warn(`Invalid storage for ${key}`, error);
+    return fallback;
+  }
+}
+
+function writeJson(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
+  const controller = new AbortController();
+  let timeout;
+  const timeoutPromise = new Promise((resolve, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error('Zeitlimit erreicht'));
+    }, timeoutMs);
+  });
+  return Promise.race([
+    fetch(url, { ...options, signal: controller.signal }),
+    timeoutPromise
+  ]).finally(() => clearTimeout(timeout));
 }
 
 function resetOutput() {
@@ -243,7 +273,7 @@ async function searchPlace(query) {
   const encoded = encodeURIComponent(query);
 
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=it,at,ch,de&accept-language=de&q=${encoded}`
     );
     if (response.ok) {
@@ -261,7 +291,7 @@ async function searchPlace(query) {
     console.warn('Nominatim search failed, trying Photon.', error);
   }
 
-  const response = await fetch(`https://photon.komoot.io/api/?q=${encoded}&limit=5&lang=de`);
+  const response = await fetchWithTimeout(`https://photon.komoot.io/api/?q=${encoded}&limit=5&lang=de`);
   if (!response.ok) throw new Error('Search failed');
 
   const data = await response.json();
@@ -281,7 +311,7 @@ async function searchPlace(query) {
 
 async function reversePlace(lat, lng) {
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=12&accept-language=de`
     );
     if (!response.ok) throw new Error('Reverse lookup failed');
@@ -303,7 +333,7 @@ function destinationSamples(lat, lng, distance = 60) {
 async function elevations(points) {
   const lats = points.map(point => point[0]).join(',');
   const lngs = points.map(point => point[1]).join(',');
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lngs}`
   );
   if (!response.ok) throw new Error('Höhendienst nicht erreichbar');
@@ -322,11 +352,11 @@ async function overpass(lat, lng, radius = 500) {
 
   for (const endpoint of endpoints) {
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetchWithTimeout(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
         body: new URLSearchParams({ data: query })
-      });
+      }, 9000);
       if (!response.ok) throw new Error(`Overpass ${response.status}`);
       return (await response.json()).elements;
     } catch (error) {
@@ -385,6 +415,33 @@ function metric(title, value, state, detail = '') {
 function linkCard(title, detail, links) {
   const buttons = links.map(link => `<a class="source-link" target="_blank" rel="noopener" href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`).join('');
   return `<div class="card"><div class="cardRow"><strong>${escapeHtml(title)}</strong><span class="badge good">Live</span></div><div class="muted">${escapeHtml(detail)}</div><div class="sourceGrid">${buttons}</div></div>`;
+}
+
+function learningCard() {
+  return `<div class="card learningCard">
+    <div class="cardRow"><strong>Angebot kommentieren</strong><span class="badge good">lernt</span></div>
+    <div class="muted">Nach dem Öffnen eines Angebots Titel oder Link eintragen, kurz bewerten und kommentieren. Daraus entstehen neue Suchsignale.</div>
+    <label>Titel oder Kurzbeschreibung <input id="feedbackTitle" placeholder="z. B. Hof mit Bergblick, aber zu nah an Straße" /></label>
+    <label>Angebotslink <input id="feedbackUrl" inputmode="url" placeholder="https://..." /></label>
+    <label>Bewertung
+      <select id="feedbackFit">
+        <option value="positive">passt gut</option>
+        <option value="maybe">prüfen</option>
+        <option value="negative">passt nicht</option>
+      </select>
+    </label>
+    <label>Kommentar <textarea id="feedbackComment" rows="3" placeholder="Was gefällt? Was ausschließen? Zum Beispiel: Alleinlage gut, Straße zu nah, zu modern, mehr Grundstück."></textarea></label>
+    <div class="quickTags" aria-label="Schnelle Kommentare">
+      <button type="button" data-feedback-tag="Alleinlage gefällt">Alleinlage</button>
+      <button type="button" data-feedback-tag="Bergblick gefällt">Bergblick</button>
+      <button type="button" data-feedback-tag="zu nah an Straße">Straße</button>
+      <button type="button" data-feedback-tag="zu modern">modern</button>
+      <button type="button" data-feedback-tag="zu wenig Grundstück">Grundstück</button>
+      <button type="button" data-feedback-tag="Renovierung ok">Renovierung</button>
+    </div>
+    <button id="saveFeedbackBtn" type="button">Kommentar speichern</button>
+    <div id="feedbackStatus" class="muted"></div>
+  </div>`;
 }
 
 function layerCenter(layer) {
@@ -485,6 +542,93 @@ function profileTerms(profile) {
   ].filter(Boolean);
 }
 
+function emptyLearningProfile() {
+  return {
+    entries: [],
+    positive: {},
+    negative: {},
+    maybe: {}
+  };
+}
+
+function loadLearningProfile() {
+  const profile = readJson(LEARNING_KEY, emptyLearningProfile());
+  return {
+    entries: Array.isArray(profile.entries) ? profile.entries : [],
+    positive: profile.positive || {},
+    negative: profile.negative || {},
+    maybe: profile.maybe || {}
+  };
+}
+
+function saveLearningProfile(profile) {
+  profile.entries = profile.entries.slice(0, 80);
+  writeJson(LEARNING_KEY, profile);
+  renderLearningSummary();
+}
+
+function rankedTerms(bucket, limit = 6) {
+  return Object.entries(bucket || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([term]) => term);
+}
+
+function learnedSearchTerms() {
+  const profile = loadLearningProfile();
+  return {
+    positive: rankedTerms(profile.positive, 7),
+    negative: rankedTerms(profile.negative, 6),
+    maybe: rankedTerms(profile.maybe, 3)
+  };
+}
+
+function normalizedWords(text) {
+  const stopWords = new Set([
+    'aber', 'alle', 'alles', 'auch', 'dass', 'der', 'die', 'das', 'den', 'dem', 'des',
+    'ein', 'eine', 'einer', 'einem', 'einen', 'für', 'gut', 'ist', 'mit', 'nicht',
+    'oder', 'sehr', 'und', 'von', 'wenig', 'viel', 'zwar', 'vermeiden'
+  ]);
+  return [...String(text).toLowerCase().matchAll(/[a-zäöüß]{4,}/g)]
+    .map(match => match[0])
+    .filter(word => !stopWords.has(word))
+    .slice(0, 20);
+}
+
+function updateBucket(bucket, words, weight) {
+  for (const word of words) {
+    bucket[word] = Math.min(99, (bucket[word] || 0) + weight);
+  }
+}
+
+function applyFeedbackLearning(entry) {
+  const profile = loadLearningProfile();
+  const titleAndComment = `${entry.title} ${entry.comment}`;
+  const commentOnly = entry.comment || entry.title;
+  const words = normalizedWords(entry.fit === 'negative' ? commentOnly : titleAndComment);
+  const protectedNegativeTerms = new Set(['grundstück', 'wohnfläche', 'bergblick', 'alleinlage']);
+  if (entry.fit === 'positive') updateBucket(profile.positive, words, 2);
+  if (entry.fit === 'maybe') updateBucket(profile.maybe, words, 1);
+  if (entry.fit === 'negative') updateBucket(profile.negative, words.filter(word => !protectedNegativeTerms.has(word)), 2);
+  if (entry.fit === 'negative' && /zu wenig grundst|mehr grundst/i.test(commentOnly)) {
+    updateBucket(profile.positive, ['grundstück'], 1);
+  }
+  profile.entries.unshift(entry);
+  saveLearningProfile(profile);
+}
+
+function learnedQuery(profile, place) {
+  const learned = learnedSearchTerms();
+  return [
+    ...profileTerms(profile),
+    place,
+    'kaufen',
+    ...learned.positive,
+    ...learned.maybe,
+    ...learned.negative.map(term => `-${term}`)
+  ].filter(Boolean).join(' ');
+}
+
 function sourceSearchUrl(sourceDomain, query) {
   return `https://www.google.com/search?q=${encodeURIComponent(`${query} site:${sourceDomain}`)}`;
 }
@@ -492,7 +636,12 @@ function sourceSearchUrl(sourceDomain, query) {
 function propertySourceCard(placeLabel) {
   const profile = currentProfile();
   const place = placeLabel || selected?.label || 'Alpenregion';
-  const query = [...profileTerms(profile), place, 'kaufen'].join(' ');
+  const query = learnedQuery(profile, place);
+  const learned = learnedSearchTerms();
+  const learnedParts = [
+    learned.positive.length ? `bevorzugt: ${learned.positive.join(', ')}` : '',
+    learned.negative.length ? `meidet: ${learned.negative.join(', ')}` : ''
+  ].filter(Boolean);
   const allDomains = [
     'immobiliare.it',
     'idealista.it',
@@ -513,8 +662,85 @@ function propertySourceCard(placeLabel) {
     { label: 'Subito', href: sourceSearchUrl('subito.it', query) },
     { label: 'AT/CH Portale', href: `https://www.google.com/search?q=${encodeURIComponent(`${query} (site:immoscout24.at OR site:willhaben.at OR site:immoscout24.ch)`)}` }
   ];
-  const detail = 'Vorgefilterte Live-Suche nach dem Wunschprofil. Für eine echte Angebotsliste direkt in AlpenFinder braucht es einen freigegebenen Portal- oder Such-API-Zugang.';
-  return linkCard('Aktuelle Immobilienangebote', detail, links);
+  const detail = learnedParts.length
+    ? `Vorgefilterte Live-Suche nach Wunschprofil und gelerntem Feedback (${learnedParts.join(' / ')}).`
+    : 'Vorgefilterte Live-Suche nach Wunschprofil. Kommentare zu Angeboten verbessern die nächsten Suchen.';
+  return linkCard('Aktuelle Immobilienangebote', detail, links) + learningCard();
+}
+
+function bindLearningControls(placeLabel) {
+  activeSuggestionPlace = placeLabel || activeSuggestionPlace || selected?.label || '';
+  const comment = $('feedbackComment');
+  const saveButton = $('saveFeedbackBtn');
+  if (!comment || !saveButton) return;
+
+  document.querySelectorAll('[data-feedback-tag]').forEach(button => {
+    button.onclick = () => {
+      const tag = button.getAttribute('data-feedback-tag');
+      comment.value = comment.value ? `${comment.value}, ${tag}` : tag;
+      comment.focus();
+    };
+  });
+
+  saveButton.onclick = () => {
+    const entry = {
+      title: $('feedbackTitle').value.trim(),
+      url: $('feedbackUrl').value.trim(),
+      fit: $('feedbackFit').value,
+      comment: comment.value.trim(),
+      place: activeSuggestionPlace,
+      target: selected ? { type: selected.type, lat: selected.lat, lng: selected.lng, label: selected.label } : null,
+      date: new Date().toISOString()
+    };
+    if (!entry.title && !entry.url && !entry.comment) {
+      $('feedbackStatus').textContent = 'Bitte mindestens Titel, Link oder Kommentar eintragen.';
+      return;
+    }
+
+    applyFeedbackLearning(entry);
+    $('feedbackTitle').value = '';
+    $('feedbackUrl').value = '';
+    comment.value = '';
+    $('feedbackFit').value = 'positive';
+    $('feedbackStatus').textContent = 'Gespeichert. Die nächsten Angebotsquellen nutzen dieses Feedback.';
+    status.textContent = 'Lernprofil aktualisiert.';
+    refreshPropertySources();
+  };
+}
+
+function refreshPropertySources() {
+  const existingLearningCard = document.querySelector('.learningCard');
+  if (!existingLearningCard || !activeSuggestionPlace) return;
+
+  const cards = [...results.children];
+  const firstSourceIndex = cards.findIndex(card => card.textContent.includes('Aktuelle Immobilienangebote'));
+  if (firstSourceIndex < 0) return;
+  cards.slice(firstSourceIndex).forEach(card => card.remove());
+  results.insertAdjacentHTML('beforeend', propertySourceCard(activeSuggestionPlace));
+  bindLearningControls(activeSuggestionPlace);
+}
+
+function renderLearningSummary() {
+  const target = $('learningSummary');
+  if (!target) return;
+
+  const profile = loadLearningProfile();
+  const positive = rankedTerms(profile.positive, 8);
+  const negative = rankedTerms(profile.negative, 8);
+  const maybe = rankedTerms(profile.maybe, 6);
+  const latest = profile.entries.slice(0, 3);
+
+  target.innerHTML = `
+    <div class="learnStats">
+      <span>${profile.entries.length} Kommentare</span>
+      <span>${positive.length} Vorlieben</span>
+      <span>${negative.length} Ausschlüsse</span>
+    </div>
+    ${positive.length ? `<div class="chipRow"><strong>Bevorzugt</strong>${positive.map(term => `<span>${escapeHtml(term)}</span>`).join('')}</div>` : ''}
+    ${negative.length ? `<div class="chipRow"><strong>Ausschließen</strong>${negative.map(term => `<span>${escapeHtml(term)}</span>`).join('')}</div>` : ''}
+    ${maybe.length ? `<div class="chipRow"><strong>Prüfen</strong>${maybe.map(term => `<span>${escapeHtml(term)}</span>`).join('')}</div>` : ''}
+    ${latest.length ? `<div class="learnHistory">${latest.map(entry => `<div><strong>${escapeHtml(entry.fit === 'negative' ? 'passt nicht' : entry.fit === 'maybe' ? 'prüfen' : 'passt')}</strong> ${escapeHtml(entry.title || entry.comment || entry.url)}</div>`).join('')}</div>` : '<div class="muted">Noch kein Feedback gespeichert.</div>'}
+  `;
 }
 
 async function analyzeSamples(samplePoints, center, radius, label, areaDescription = '') {
@@ -533,6 +759,7 @@ async function analyzeSamples(samplePoints, center, radius, label, areaDescripti
   const mapElements = mapResult.status === 'fulfilled' ? mapResult.value : [];
   const mapDetailsAvailable = mapResult.status === 'fulfilled';
   const placeLabel = reverseResult.status === 'fulfilled' ? reverseResult.value : label;
+  activeSuggestionPlace = placeLabel || label;
 
   const avgElevation = terrains.reduce((sum, terrain) => sum + terrain.elevation, 0) / terrains.length;
   const avgSlope = terrains.reduce((sum, terrain) => sum + terrain.slope, 0) / terrains.length;
@@ -576,6 +803,7 @@ async function analyzeSamples(samplePoints, center, radius, label, areaDescripti
     metric('Wasserhinweise', !mapDetailsAvailable ? 'Kartendienst nicht erreichbar' : spring != null ? `Quelle ca. ${Math.round(spring)} m` : water != null ? `Gewässer ca. ${Math.round(water)} m` : 'kein Eintrag im Suchradius', spring != null ? 'good' : water != null ? 'warn' : 'bad') +
     metric('Gebäudeumfeld', !mapDetailsAvailable ? 'Kartendienst nicht erreichbar' : `${buildings} kartierte Gebäude`, mapDetailsAvailable && buildings > 0 ? 'good' : 'warn', 'Anzahl im ungefähren Suchradius.') +
     propertySourceCard(placeLabel || label);
+  bindLearningControls(placeLabel || label);
 
   status.textContent = mapDetailsAvailable
     ? 'Analyse abgeschlossen.'
@@ -617,7 +845,7 @@ $('routeBtn').onclick = async () => {
 
     status.textContent = selected.type === 'areas' ? 'Anfahrt zum Mittelpunkt wird geprüft…' : 'Anfahrt wird geprüft…';
     const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson&steps=true`;
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, {}, 12000);
     if (!response.ok) throw new Error('Route failed');
 
     const data = await response.json();
@@ -733,6 +961,13 @@ $('slopeMax').oninput = event => {
 $('roadMax').oninput = event => {
   $('roadOut').value = `${event.target.value} m`;
 };
+$('clearLearningBtn').onclick = () => {
+  writeJson(LEARNING_KEY, emptyLearningProfile());
+  renderLearningSummary();
+  refreshPropertySources();
+  status.textContent = 'Lernprofil zurückgesetzt.';
+};
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+renderLearningSummary();
 renderFavorites();

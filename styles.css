@@ -39,14 +39,22 @@ header span {
 }
 button,
 input,
-select { font: inherit; }
+select,
+textarea { font: inherit; }
 input,
-select {
+select,
+textarea {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 10px;
   background: #fff;
   color: var(--ink);
+}
+textarea {
+  width: 100%;
+  margin-top: 6px;
+  resize: vertical;
+  min-height: 82px;
 }
 button {
   border: 0;
@@ -296,6 +304,57 @@ input[type=range] {
   font-weight: 800;
   font-size: 13px;
 }
+.learningCard label {
+  margin-top: 10px;
+}
+.quickTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+.quickTags button {
+  background: #ebe6da;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+.learningSummary {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 12px;
+}
+.learnStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.learnStats span,
+.chipRow span {
+  background: #ebe6da;
+  border-radius: 999px;
+  padding: 7px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.chipRow strong {
+  width: 100%;
+  font-size: 12px;
+}
+.learnHistory {
+  display: grid;
+  gap: 6px;
+  color: #706d65;
+  font-size: 13px;
+}
 .leaflet-draw-toolbar a {
   width: 32px !important;
   height: 32px !important;
@@ -331,6 +390,7 @@ input[type=range] {
     padding: 8px 6px;
   }
   .sourceGrid { grid-template-columns: 1fr; }
+  .learnStats { grid-template-columns: 1fr; }
   .cardRow { align-items: flex-start; }
   .actions button { min-width: 0; }
 }
