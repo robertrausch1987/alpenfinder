@@ -242,6 +242,25 @@ label {
   font-size: 13px;
   margin-top: 13px;
 }
+.toggleLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+.toggleLine input {
+  width: auto;
+  margin: 0;
+}
+.profileNote {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #f4f1e9;
+  color: #555148;
+  font-size: 13px;
+  line-height: 1.35;
+}
 input[type=range],
 select {
   width: 100%;

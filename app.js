@@ -434,7 +434,11 @@ function learningCard() {
     <div class="quickTags" aria-label="Schnelle Kommentare">
       <button type="button" data-feedback-tag="Alleinlage gefällt">Alleinlage</button>
       <button type="button" data-feedback-tag="Bergblick gefällt">Bergblick</button>
+      <button type="button" data-feedback-tag="Bergpanorama ist entscheidend">Panorama</button>
+      <button type="button" data-feedback-tag="Naturkulisse gefällt">Natur</button>
+      <button type="button" data-feedback-tag="Refugium Charakter gefällt">Refugium</button>
       <button type="button" data-feedback-tag="zu nah an Straße">Straße</button>
+      <button type="button" data-feedback-tag="Luxusvilla ausschließen">Luxusvilla</button>
       <button type="button" data-feedback-tag="zu modern">modern</button>
       <button type="button" data-feedback-tag="zu wenig Grundstück">Grundstück</button>
       <button type="button" data-feedback-tag="Renovierung ok">Renovierung</button>
@@ -524,6 +528,7 @@ function samplesForLayer(layer) {
 
 function currentProfile() {
   return {
+    refugeMode: $('refugeMode').checked,
     livingMin: $('livingMin').value.trim(),
     plotMin: $('plotMin').value.trim(),
     buildingType: $('buildingType').value,
@@ -535,6 +540,7 @@ function currentProfile() {
 function profileTerms(profile) {
   return [
     profile.buildingType || 'Immobilie',
+    profile.refugeMode ? 'Bergpanorama Naturkulisse Refugium ruhig Alleinlage rustikal' : '',
     profile.livingMin ? `ab ${profile.livingMin} m2 Wohnfläche` : '',
     profile.plotMin ? `ab ${profile.plotMin} m2 Grundstück` : '',
     profile.yearFrom ? `Baujahr ab ${profile.yearFrom}` : '',
@@ -583,6 +589,12 @@ function learnedSearchTerms() {
   };
 }
 
+function defaultNegativeTerms(profile) {
+  return profile.refugeMode
+    ? ['luxusvilla', 'luxus', 'prestige', 'designer', 'neubau', 'penthouse']
+    : [];
+}
+
 function normalizedWords(text) {
   const stopWords = new Set([
     'aber', 'alle', 'alles', 'auch', 'dass', 'der', 'die', 'das', 'den', 'dem', 'des',
@@ -606,7 +618,7 @@ function applyFeedbackLearning(entry) {
   const titleAndComment = `${entry.title} ${entry.comment}`;
   const commentOnly = entry.comment || entry.title;
   const words = normalizedWords(entry.fit === 'negative' ? commentOnly : titleAndComment);
-  const protectedNegativeTerms = new Set(['grundstück', 'wohnfläche', 'bergblick', 'alleinlage']);
+  const protectedNegativeTerms = new Set(['grundstück', 'wohnfläche', 'bergblick', 'bergpanorama', 'panorama', 'naturkulisse', 'refugium', 'alleinlage']);
   if (entry.fit === 'positive') updateBucket(profile.positive, words, 2);
   if (entry.fit === 'maybe') updateBucket(profile.maybe, words, 1);
   if (entry.fit === 'negative') updateBucket(profile.negative, words.filter(word => !protectedNegativeTerms.has(word)), 2);
@@ -619,13 +631,30 @@ function applyFeedbackLearning(entry) {
 
 function learnedQuery(profile, place) {
   const learned = learnedSearchTerms();
+  const negativeTerms = [...new Set([...defaultNegativeTerms(profile), ...learned.negative])];
   return [
     ...profileTerms(profile),
     place,
     'kaufen',
     ...learned.positive,
     ...learned.maybe,
-    ...learned.negative.map(term => `-${term}`)
+    ...negativeTerms.map(term => `-${term}`)
+  ].filter(Boolean).join(' ');
+}
+
+function offMarketQuery(profile, place) {
+  const learned = learnedSearchTerms();
+  const negativeTerms = [...new Set([...defaultNegativeTerms(profile), ...learned.negative])];
+  return [
+    'Satellitenbild',
+    'Kataster',
+    'Flurstück',
+    'Hofstelle',
+    'Grundstück',
+    profile.refugeMode ? 'Bergpanorama Naturkulisse Alleinlage Refugium' : '',
+    place,
+    ...learned.positive,
+    ...negativeTerms.map(term => `-${term}`)
   ].filter(Boolean).join(' ');
 }
 
@@ -637,8 +666,10 @@ function propertySourceCard(placeLabel) {
   const profile = currentProfile();
   const place = placeLabel || selected?.label || 'Alpenregion';
   const query = learnedQuery(profile, place);
+  const offMarket = offMarketQuery(profile, place);
   const learned = learnedSearchTerms();
   const learnedParts = [
+    profile.refugeMode ? 'Grundausrichtung: Bergpanorama, Naturkulisse, Refugium, keine Luxusvilla' : '',
     learned.positive.length ? `bevorzugt: ${learned.positive.join(', ')}` : '',
     learned.negative.length ? `meidet: ${learned.negative.join(', ')}` : ''
   ].filter(Boolean);
@@ -662,10 +693,18 @@ function propertySourceCard(placeLabel) {
     { label: 'Subito', href: sourceSearchUrl('subito.it', query) },
     { label: 'AT/CH Portale', href: `https://www.google.com/search?q=${encodeURIComponent(`${query} (site:immoscout24.at OR site:willhaben.at OR site:immoscout24.ch)`)}` }
   ];
+  const offMarketLinks = [
+    { label: 'Satellit prüfen', href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}` },
+    { label: 'Kataster/Flurstücke', href: `https://www.google.com/search?q=${encodeURIComponent(`${offMarket} Südtirol Kataster Grundbuch`)}` },
+    { label: 'Off-Market Hinweise', href: `https://www.google.com/search?q=${encodeURIComponent(offMarket)}` }
+  ];
   const detail = learnedParts.length
     ? `Vorgefilterte Live-Suche nach Wunschprofil und gelerntem Feedback (${learnedParts.join(' / ')}).`
     : 'Vorgefilterte Live-Suche nach Wunschprofil. Kommentare zu Angeboten verbessern die nächsten Suchen.';
-  return linkCard('Aktuelle Immobilienangebote', detail, links) + learningCard();
+  const offMarketDetail = 'Separate Spur für Objekte, die nicht sichtbar angeboten werden: Hofstellen, Gebäude und Grundstücke werden über Satellit, Karte und Katasterhinweise weiter geprüft.';
+  return linkCard('A) Am Markt angebotene Objekte', detail, links) +
+    linkCard('B) Off-Market-Kandidaten', offMarketDetail, offMarketLinks) +
+    learningCard();
 }
 
 function bindLearningControls(placeLabel) {
@@ -713,7 +752,7 @@ function refreshPropertySources() {
   if (!existingLearningCard || !activeSuggestionPlace) return;
 
   const cards = [...results.children];
-  const firstSourceIndex = cards.findIndex(card => card.textContent.includes('Aktuelle Immobilienangebote'));
+  const firstSourceIndex = cards.findIndex(card => card.textContent.includes('A) Am Markt angebotene Objekte'));
   if (firstSourceIndex < 0) return;
   cards.slice(firstSourceIndex).forEach(card => card.remove());
   results.insertAdjacentHTML('beforeend', propertySourceCard(activeSuggestionPlace));
@@ -940,6 +979,7 @@ window.openFav = index => {
     });
     if (favorite.profile) {
       $('livingMin').value = favorite.profile.livingMin || '';
+      $('refugeMode').checked = favorite.profile.refugeMode !== false;
       $('plotMin').value = favorite.profile.plotMin || '';
       $('buildingType').value = favorite.profile.buildingType || '';
       $('yearFrom').value = favorite.profile.yearFrom || '';
