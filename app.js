@@ -74,6 +74,69 @@ function writeJson(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+function storedFavorites() {
+  return readJson('alpenFavorites', []);
+}
+
+function storedProperties() {
+  return readJson(PROPERTY_KEY, []);
+}
+
+function updateScoutDashboard() {
+  const stats = $('scoutStats');
+  const next = $('scoutNext');
+  if (!stats || !next) return;
+
+  const properties = storedProperties();
+  const learning = loadLearningProfile();
+  const interesting = properties.filter(property => property.stage === 'interesting').length;
+  const review = properties.filter(property => property.stage === 'manual_review' || property.stage === 'auto_scored').length;
+  const favorites = storedFavorites().length;
+
+  stats.innerHTML = `
+    <span>${properties.length} Kandidaten</span>
+    <span>${interesting} interessant</span>
+    <span>${review} zu prüfen</span>
+    <span>${learning.entries.length} Lernsignale</span>
+  `;
+
+  if (!selected) {
+    next.textContent = 'Region suchen oder Gebiet einzeichnen.';
+  } else if (!lastAnalysis) {
+    next.textContent = 'Suchlauf starten, dann Objekt speichern.';
+  } else if (!properties.length) {
+    next.textContent = 'Passendes Angebot aufnehmen oder Off-Market-Spur prüfen.';
+  } else if (interesting) {
+    next.textContent = 'Interessante Objekte: Kataster, Baurecht, Wert und Kontakt vorbereiten.';
+  } else {
+    next.textContent = 'Kandidaten bewerten: interessant, prüfen oder verwerfen.';
+  }
+}
+
+function exportDossier() {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    app: 'AlpenFinder',
+    version: '20260723-autoscout',
+    selected: currentTargetSnapshot(),
+    lastAnalysis,
+    favorites: storedFavorites(),
+    learningProfile: loadLearningProfile(),
+    properties: storedProperties(),
+    note: 'Personenbezogene Eigentümerdaten gehören erst nach legaler Prüfung und Freigabe in ein geschütztes Backend, nicht in diese lokale PWA.'
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `alpenfinder-dossier-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  status.textContent = 'Dossier exportiert.';
+}
+
 function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
   const controller = new AbortController();
   let timeout;
@@ -93,10 +156,11 @@ function resetOutput() {
   results.innerHTML = '';
   routeResult.innerHTML = '';
   $('score').classList.add('hidden');
+  updateScoutDashboard();
 }
 
 function enableTargetActions(enabled) {
-  ['analyzeBtn', 'routeBtn', 'saveBtn'].forEach(id => {
+  ['analyzeBtn', 'routeBtn', 'saveBtn', 'magicBtn'].forEach(id => {
     $(id).disabled = !enabled;
   });
 }
@@ -118,6 +182,7 @@ function setSelectedPoint(lat, lng, label = 'Ausgewählter Standort') {
   $('coords').textContent = `${label} · ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
   enableTargetActions(true);
   resetOutput();
+  updateScoutDashboard();
   setTimeout(() => map.invalidateSize(), 0);
 }
 
@@ -157,6 +222,7 @@ function setSelectedAreas({ fit = false } = {}) {
   $('coords').textContent = `${selected.label} · ca. ${hectares.toFixed(1)} ha · Mittelpunkt ${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`;
   enableTargetActions(true);
   resetOutput();
+  updateScoutDashboard();
   if (fit && bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30] });
   setTimeout(() => map.invalidateSize(), 0);
 }
@@ -746,6 +812,7 @@ function bindLearningControls(placeLabel) {
     $('feedbackStatus').textContent = 'Gespeichert. Die nächsten Angebotsquellen nutzen dieses Feedback.';
     status.textContent = 'Lernprofil aktualisiert.';
     refreshPropertySources();
+    updateScoutDashboard();
   };
 }
 
@@ -856,6 +923,42 @@ function scoreImportedProperty(property) {
   };
 }
 
+function acquisitionPlanFor(property) {
+  const place = property.target?.label || property.address || 'Objektlage';
+  return [
+    {
+      id: 'source',
+      title: 'Originalquelle sichern',
+      status: property.url ? 'bereit' : 'offen',
+      detail: property.url ? 'Link vorhanden, Originalangaben manuell prüfen.' : 'Angebotslink fehlt.'
+    },
+    {
+      id: 'parcel',
+      title: 'Flurstück/Kataster legal klären',
+      status: 'offen',
+      detail: `${place}: Kataster/Grundbuch nur über zulässige Dienste oder Fachpartner prüfen.`
+    },
+    {
+      id: 'zoning',
+      title: 'Widmung und Baurecht prüfen',
+      status: 'offen',
+      detail: 'Gemeinde, Geometer oder Architekt einbeziehen; keine rechtliche Sicherheit aus Kartendaten ableiten.'
+    },
+    {
+      id: 'value',
+      title: 'Preisspanne vorbereiten',
+      status: property.price ? 'teilweise' : 'offen',
+      detail: property.price ? 'Angebotspreis vorhanden; Vergleichswerte und Sanierungskosten fehlen.' : 'Preis fehlt.'
+    },
+    {
+      id: 'contact',
+      title: 'Kontaktentwurf vorbereiten',
+      status: 'wartet',
+      detail: 'Keine Nachricht ohne Freigabe. Erst Empfänger und Zweck klären.'
+    }
+  ];
+}
+
 function currentTargetSnapshot() {
   if (!selected) return null;
   return {
@@ -897,6 +1000,7 @@ function saveImportedProperty() {
     createdAt: new Date().toISOString()
   };
   property.score = scoreImportedProperty(property);
+  property.plan = acquisitionPlanFor(property);
 
   const properties = readJson(PROPERTY_KEY, []);
   properties.unshift(property);
@@ -907,18 +1011,21 @@ function saveImportedProperty() {
   $('listingAddress').value = '';
   $('listingNotes').value = '';
   renderProperties();
+  updateScoutDashboard();
   status.textContent = 'Objekt bewertet und gespeichert.';
 }
 
 function propertyCard(property) {
   const price = property.price == null ? 'Preis offen' : `${property.price.toLocaleString('de-DE')} €`;
   const source = property.url ? `<a target="_blank" rel="noopener" href="${escapeHtml(property.url)}">Quelle öffnen</a>` : '<span>Quelle fehlt</span>';
+  const plan = property.plan || acquisitionPlanFor(property);
   return `<div class="propertyCard">
     <div class="cardRow"><strong>${escapeHtml(property.title)}</strong><span class="badge ${property.score.total >= 75 ? 'good' : property.score.total >= 55 ? 'warn' : 'bad'}">${property.score.total}/100</span></div>
     <div class="muted">${escapeHtml(property.address || property.target?.label || 'Lage offen')} · ${escapeHtml(price)} · Datenqualität ${property.score.dataQuality}/100</div>
     <div class="propertyMeta">${source}<span>${escapeHtml(property.stage)}</span></div>
     <div class="miniList"><strong>Stärken</strong>${property.score.strengths.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>
     <div class="miniList"><strong>Risiken/offen</strong>${property.score.risks.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>
+    <div class="nextPlan"><strong>Nächste Prüfungen</strong>${plan.map(item => `<span>${escapeHtml(item.title)} · ${escapeHtml(item.status)}</span>`).join('')}</div>
     <div class="propertyActions">
       <button type="button" onclick="markProperty('${property.id}','interesting')">Interessant</button>
       <button type="button" class="secondary" onclick="markProperty('${property.id}','manual_review')">Prüfen</button>
@@ -930,10 +1037,11 @@ function propertyCard(property) {
 function renderProperties() {
   const target = $('properties');
   if (!target) return;
-  const properties = readJson(PROPERTY_KEY, []);
+  const properties = storedProperties();
   target.innerHTML = properties.length
     ? properties.map(propertyCard).join('')
     : '<div class="muted">Noch keine Objektkandidaten gespeichert.</div>';
+  updateScoutDashboard();
 }
 
 window.markProperty = (id, stage) => {
@@ -942,8 +1050,9 @@ window.markProperty = (id, stage) => {
   if (!property) return;
   property.stage = stage;
   property.updatedAt = new Date().toISOString();
-  writeJson(PROPERTY_KEY, properties);
   if (stage === 'interesting') {
+    property.plan = acquisitionPlanFor(property);
+    writeJson(PROPERTY_KEY, properties);
     applyFeedbackLearning({
       title: property.title,
       url: property.url,
@@ -955,9 +1064,11 @@ window.markProperty = (id, stage) => {
     });
     status.textContent = 'Objekt als interessant markiert. Lernprofil aktualisiert.';
   } else {
+    writeJson(PROPERTY_KEY, properties);
     status.textContent = `Objektstatus aktualisiert: ${stage}.`;
   }
   renderProperties();
+  updateScoutDashboard();
 };
 
 async function analyzeSamples(samplePoints, center, radius, label, areaDescription = '') {
@@ -1041,6 +1152,7 @@ async function analyzeSamples(samplePoints, center, radius, label, areaDescripti
   status.textContent = mapDetailsAvailable
     ? 'Analyse abgeschlossen.'
     : 'Analyse abgeschlossen. Weg-, Wasser- und Gebäudehinweise konnten temporär nicht geladen werden.';
+  updateScoutDashboard();
 }
 
 $('analyzeBtn').onclick = async () => {
@@ -1066,6 +1178,14 @@ $('analyzeBtn').onclick = async () => {
     console.error(error);
     status.textContent = 'Ein Teil der öffentlichen Dienste war nicht erreichbar. Bitte erneut versuchen.';
   }
+};
+
+$('magicBtn').onclick = () => {
+  if (!selected) {
+    status.textContent = 'Bitte zuerst Ort suchen oder Suchgebiet einzeichnen.';
+    return;
+  }
+  $('analyzeBtn').click();
 };
 
 $('routeBtn').onclick = async () => {
@@ -1145,6 +1265,7 @@ $('saveBtn').onclick = () => {
   }
   localStorage.setItem('alpenFavorites', JSON.stringify(favorites.slice(0, 30)));
   renderFavorites();
+  updateScoutDashboard();
   status.textContent = 'Favorit gespeichert.';
 };
 
@@ -1200,10 +1321,13 @@ $('clearLearningBtn').onclick = () => {
   renderLearningSummary();
   refreshPropertySources();
   status.textContent = 'Lernprofil zurückgesetzt.';
+  updateScoutDashboard();
 };
 $('saveListingBtn').onclick = saveImportedProperty;
+$('exportDataBtn').onclick = exportDossier;
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 renderLearningSummary();
 renderFavorites();
 renderProperties();
+updateScoutDashboard();

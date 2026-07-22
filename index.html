@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-  <link rel="stylesheet" href="styles.css?v=20260722-e2e" />
+  <link rel="stylesheet" href="styles.css?v=20260723-autoscout" />
 </head>
 <body>
   <header>
@@ -34,6 +34,17 @@
     <section class="panel" id="panel">
       <div class="panelHead"><h1>Standortprüfung</h1><button id="closePanel" class="ghost">×</button></div>
       <p id="coords" class="muted">Noch kein Standort ausgewählt.</p>
+      <section class="scoutBox" aria-label="Scout-Zentrale">
+        <div>
+          <strong>Scout-Zentrale</strong>
+          <span id="scoutNext">Region suchen oder Gebiet einzeichnen.</span>
+        </div>
+        <div id="scoutStats" class="scoutStats"></div>
+        <div class="scoutActions">
+          <button id="magicBtn" type="button" disabled>Suchlauf starten</button>
+          <button id="exportDataBtn" class="secondary" type="button">Dossier exportieren</button>
+        </div>
+      </section>
       <div class="actions">
         <button id="analyzeBtn" disabled>Standort analysieren</button>
         <button id="routeBtn" class="secondary" disabled>Anfahrt prüfen</button>
@@ -92,6 +103,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
-  <script src="app.js?v=20260722-e2e"></script>
+  <script src="app.js?v=20260723-autoscout"></script>
 </body>
 </html>
