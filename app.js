@@ -43,6 +43,61 @@ const results = $('results');
 const routeResult = $('routeResult');
 const LEARNING_KEY = 'alpenLearningProfile';
 const PROPERTY_KEY = 'alpenProperties';
+const REGION_KEY = 'alpenRegions';
+const SCOUT_MODE_KEY = 'alpenScoutMode';
+
+const AUTO_REGION_SUGGESTIONS = [
+  {
+    id: 'auto-passeier',
+    name: 'Passeier Sonnenlagen',
+    lat: 46.831,
+    lng: 11.206,
+    zoom: 12,
+    badge: 'Panorama',
+    reason: 'Sued- und Westhaenge, Meran-nahe Erreichbarkeit, viele Hofstellen und starke Bergkulisse.',
+    tags: ['Bergpanorama', 'Hofstellen', 'Meran-nahe']
+  },
+  {
+    id: 'auto-ultental',
+    name: 'Ultental Rueckzugsorte',
+    lat: 46.55,
+    lng: 11.01,
+    zoom: 12,
+    badge: 'Refugium',
+    reason: 'Sehr ruhige Seitental-Lagen mit Naturkulisse, Wassernaehe und weniger Luxusvilla-Signal.',
+    tags: ['Natur', 'Wasser', 'ruhig']
+  },
+  {
+    id: 'auto-villnoess',
+    name: 'Villnoess Dolomitenblick',
+    lat: 46.64,
+    lng: 11.72,
+    zoom: 12,
+    badge: 'Kulisse',
+    reason: 'Dolomitenpanorama und verstreute Lagen, gut fuer Haus- und Grundstuecksspuren.',
+    tags: ['Dolomiten', 'Panorama', 'Grundstuecke']
+  },
+  {
+    id: 'auto-ritten',
+    name: 'Ritten Hochlagen',
+    lat: 46.54,
+    lng: 11.46,
+    zoom: 12,
+    badge: 'Balance',
+    reason: 'Hochplateau mit weitem Blick, erreichbarer Infrastruktur und pruefenswerten Altbestand-Spuren.',
+    tags: ['Weitblick', 'Altbestand', 'Zufahrt']
+  },
+  {
+    id: 'auto-vinschgau',
+    name: 'Vinschgau Sonnenhaenge',
+    lat: 46.63,
+    lng: 10.78,
+    zoom: 11,
+    badge: 'Sonne',
+    reason: 'Sonnenreiche Hanglagen mit alpinem Charakter, passend fuer einfache Refugien statt Prestigeobjekte.',
+    tags: ['Sonne', 'Hanglage', 'rustikal']
+  }
+];
 
 const areaStyle = {
   color: '#171712',
@@ -82,6 +137,10 @@ function storedProperties() {
   return readJson(PROPERTY_KEY, []);
 }
 
+function storedRegions() {
+  return readJson(REGION_KEY, []);
+}
+
 function updateScoutDashboard() {
   const stats = $('scoutStats');
   const next = $('scoutNext');
@@ -90,18 +149,19 @@ function updateScoutDashboard() {
   const properties = storedProperties();
   const learning = loadLearningProfile();
   const interesting = properties.filter(property => property.stage === 'interesting').length;
-  const review = properties.filter(property => property.stage === 'manual_review' || property.stage === 'auto_scored').length;
-  const favorites = storedFavorites().length;
+  const regions = storedRegions().length;
 
   stats.innerHTML = `
     <span>${properties.length} Kandidaten</span>
     <span>${interesting} interessant</span>
-    <span>${review} zu prüfen</span>
+    <span>${regions} Regionen</span>
     <span>${learning.entries.length} Lernsignale</span>
   `;
 
-  if (!selected) {
-    next.textContent = 'Region suchen oder Gebiet einzeichnen.';
+  if (regions && !selected) {
+    next.textContent = 'Gespeicherte Region antippen oder neue Vorschlagsregion prüfen.';
+  } else if (!selected) {
+    next.textContent = 'Automatischen Vorschlag wählen oder Region einzeichnen.';
   } else if (!lastAnalysis) {
     next.textContent = 'Suchlauf starten, dann Objekt speichern.';
   } else if (!properties.length) {
@@ -117,10 +177,11 @@ function exportDossier() {
   const payload = {
     exportedAt: new Date().toISOString(),
     app: 'AlpenFinder',
-    version: '20260723-autoscout',
+    version: '20260723-segments',
     selected: currentTargetSnapshot(),
     lastAnalysis,
     favorites: storedFavorites(),
+    regions: storedRegions(),
     learningProfile: loadLearningProfile(),
     properties: storedProperties(),
     note: 'Personenbezogene Eigentümerdaten gehören erst nach legaler Prüfung und Freigabe in ein geschütztes Backend, nicht in diese lokale PWA.'
@@ -501,6 +562,161 @@ function sourcePreviewSection(title, detail, previews) {
     </article>
   `).join('');
   return `<div class="card sourceSection"><div class="cardRow"><strong>${escapeHtml(title)}</strong><span class="badge good">Live</span></div><div class="muted">${escapeHtml(detail)}</div><div class="sourcePreviewGrid">${cards}</div></div>`;
+}
+
+function googleMapsSearchUrl(label, lat, lng) {
+  const query = label ? `${label} ${lat.toFixed(5)},${lng.toFixed(5)}` : `${lat},${lng}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
+function allRegions() {
+  return [...AUTO_REGION_SUGGESTIONS, ...storedRegions()];
+}
+
+function findRegionById(id) {
+  return allRegions().find(region => region.id === id);
+}
+
+function regionCard(region, mode) {
+  const tags = (region.tags || []).slice(0, 4).map(tag => `<span>${escapeHtml(tag)}</span>`).join('');
+  const source = mode === 'auto' ? 'Vorschlag' : 'Suchregion';
+  const actionText = mode === 'auto' ? 'Vorschlag prüfen' : 'Region prüfen';
+  return `<article class="sourcePreview regionCard">
+    <div class="sourcePreviewTop">
+      <strong>${escapeHtml(region.name)}</strong>
+      <span>${escapeHtml(region.badge || source)}</span>
+    </div>
+    <p>${escapeHtml(region.reason || 'Gespeicherter Suchraum fuer passende Angebote und Off-Market-Spuren.')}</p>
+    ${tags ? `<div class="regionTags">${tags}</div>` : ''}
+    <div class="sourcePreviewMeta">${escapeHtml(source)} · ${Number(region.lat).toFixed(4)}, ${Number(region.lng).toFixed(4)}</div>
+    <div class="sourcePreviewActions">
+      <button type="button" class="selectRegionBtn" data-region-id="${escapeHtml(region.id)}">${escapeHtml(actionText)}</button>
+      <button type="button" class="secondary createRegionCandidateBtn" data-region-id="${escapeHtml(region.id)}">Off-Market merken</button>
+    </div>
+  </article>`;
+}
+
+function renderAutoSuggestions() {
+  const target = $('autoSuggestions');
+  if (!target) return;
+  target.innerHTML = AUTO_REGION_SUGGESTIONS.map(region => regionCard(region, 'auto')).join('');
+}
+
+function renderSavedRegions() {
+  const target = $('savedRegions');
+  if (!target) return;
+  const regions = storedRegions();
+  target.innerHTML = regions.length
+    ? regions.map(region => regionCard(region, 'saved')).join('')
+    : '<div class="muted">Noch keine Region gespeichert. Ort suchen, Punkt antippen oder Flaeche einzeichnen und dann speichern.</div>';
+  updateScoutDashboard();
+}
+
+function setScoutMode(mode) {
+  const activeMode = mode === 'regions' ? 'regions' : 'auto';
+  localStorage.setItem(SCOUT_MODE_KEY, activeMode);
+  $('autoModeBtn')?.classList.toggle('active', activeMode === 'auto');
+  $('regionModeBtn')?.classList.toggle('active', activeMode === 'regions');
+  $('autoModePanel')?.classList.toggle('hidden', activeMode !== 'auto');
+  $('regionModePanel')?.classList.toggle('hidden', activeMode !== 'regions');
+}
+
+function restoreRegionAreas(region) {
+  if (!Array.isArray(region.areas) || !region.areas.length) return false;
+  drawnItems.clearLayers();
+  region.areas.map(storedToLayer).forEach(layer => {
+    styleAreaLayer(layer);
+    drawnItems.addLayer(layer);
+  });
+  setSelectedAreas({ fit: true });
+  return true;
+}
+
+function applyStoredProfile(profile) {
+  if (!profile) return;
+  $('livingMin').value = profile.livingMin || '';
+  $('refugeMode').checked = profile.refugeMode !== false;
+  $('plotMin').value = profile.plotMin || '';
+  $('buildingType').value = profile.buildingType || '';
+  $('yearFrom').value = profile.yearFrom || '';
+  $('locationPref').value = profile.locationPref || '';
+}
+
+function selectRegion(region, { analyze = true } = {}) {
+  if (!region) return;
+  setScoutMode(region.source === 'user' ? 'regions' : 'auto');
+  applyStoredProfile(region.profile);
+  if (!restoreRegionAreas(region)) {
+    drawnItems.clearLayers();
+    $('clearAreasBtn').disabled = true;
+    setSelectedPoint(Number(region.lat), Number(region.lng), region.name);
+    map.setView([Number(region.lat), Number(region.lng)], region.zoom || 13);
+  }
+  status.textContent = `${region.name} ist ausgewählt.`;
+  if (analyze) setTimeout(() => $('analyzeBtn').click(), 50);
+}
+
+function saveCurrentRegion() {
+  const nameInput = $('regionNameInput');
+  const typedName = nameInput ? nameInput.value.trim() : '';
+  const center = selected ? { lat: selected.lat, lng: selected.lng } : map.getCenter();
+  const layers = getAreaLayers();
+  const isAreaSelection = selected?.type === 'areas' && layers.length;
+  const region = {
+    id: `region-${Date.now()}`,
+    name: typedName || (selected?.label && selected.label !== 'Ausgewählter Standort' ? selected.label : 'Eigene Suchregion'),
+    lat: center.lat,
+    lng: center.lng,
+    zoom: map.getZoom(),
+    badge: isAreaSelection ? 'Gebiet' : 'Region',
+    reason: isAreaSelection
+      ? 'Von euch eingezeichneter Suchbereich fuer Marktangebote und Off-Market-Kandidaten.'
+      : 'Von euch gespeicherter Suchpunkt fuer Marktangebote und Off-Market-Kandidaten.',
+    tags: isAreaSelection ? ['eingezeichnet', 'Suchgebiet', 'Off-Market'] : ['vordefiniert', 'Suche', 'Off-Market'],
+    source: 'user',
+    areas: isAreaSelection ? layers.map(layerToStored) : [],
+    profile: currentProfile(),
+    createdAt: new Date().toISOString()
+  };
+  const regions = storedRegions();
+  regions.unshift(region);
+  writeJson(REGION_KEY, regions.slice(0, 30));
+  if (nameInput) nameInput.value = '';
+  renderSavedRegions();
+  setScoutMode('regions');
+  status.textContent = 'Region gespeichert. Sie kann jetzt wiederholt geprüft werden.';
+}
+
+function createRegionCandidate(region) {
+  if (!region) return;
+  const target = {
+    type: Array.isArray(region.areas) && region.areas.length ? 'areas' : 'region',
+    lat: Number(region.lat),
+    lng: Number(region.lng),
+    label: region.name
+  };
+  const property = {
+    id: `prop-${Date.now()}`,
+    kind: 'off_market_region',
+    stage: 'manual_review',
+    title: `Off-Market Suchauftrag: ${region.name}`,
+    url: googleMapsSearchUrl(region.name, Number(region.lat), Number(region.lng)),
+    price: null,
+    address: region.name,
+    notes: `${region.reason || 'Region pruefen.'} Naechster Schritt: Gebaeude, freie Grundstuecke, Katasterspur und Kontaktweg legal klaeren.`,
+    profile: region.profile || currentProfile(),
+    target,
+    analysis: lastAnalysis,
+    createdAt: new Date().toISOString()
+  };
+  property.score = scoreImportedProperty(property);
+  property.plan = acquisitionPlanFor(property);
+  const properties = storedProperties();
+  properties.unshift(property);
+  writeJson(PROPERTY_KEY, properties.slice(0, 80));
+  renderProperties();
+  updateScoutDashboard();
+  status.textContent = 'Off-Market-Spur als Kandidat gespeichert.';
 }
 
 function learningCard() {
@@ -1377,14 +1593,7 @@ window.openFav = index => {
       styleAreaLayer(layer);
       drawnItems.addLayer(layer);
     });
-    if (favorite.profile) {
-      $('livingMin').value = favorite.profile.livingMin || '';
-      $('refugeMode').checked = favorite.profile.refugeMode !== false;
-      $('plotMin').value = favorite.profile.plotMin || '';
-      $('buildingType').value = favorite.profile.buildingType || '';
-      $('yearFrom').value = favorite.profile.yearFrom || '';
-      $('locationPref').value = favorite.profile.locationPref || '';
-    }
+    applyStoredProfile(favorite.profile);
     setSelectedAreas({ fit: true });
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
@@ -1410,15 +1619,36 @@ $('clearLearningBtn').onclick = () => {
 };
 $('saveListingBtn').onclick = saveImportedProperty;
 $('exportDataBtn').onclick = exportDossier;
+$('autoModeBtn').onclick = () => setScoutMode('auto');
+$('regionModeBtn').onclick = () => setScoutMode('regions');
+$('saveCurrentRegionBtn').onclick = saveCurrentRegion;
+$('runRegionsBtn').onclick = () => {
+  const regions = storedRegions();
+  if (!regions.length) {
+    status.textContent = 'Bitte zuerst eine Region speichern.';
+    setScoutMode('regions');
+    return;
+  }
+  selectRegion(regions[0], { analyze: true });
+};
 ['listingTitle', 'listingUrl', 'listingPrice', 'listingAddress', 'listingNotes'].forEach(id => {
   $(id).addEventListener('input', updateListingPreview);
 });
 document.addEventListener('click', event => {
-  const button = event.target.closest('.saveSearchCandidate');
-  if (button) saveSearchCandidate(button);
+  const sourceButton = event.target.closest('.saveSearchCandidate');
+  if (sourceButton) saveSearchCandidate(sourceButton);
+
+  const regionButton = event.target.closest('.selectRegionBtn');
+  if (regionButton) selectRegion(findRegionById(regionButton.dataset.regionId), { analyze: true });
+
+  const candidateButton = event.target.closest('.createRegionCandidateBtn');
+  if (candidateButton) createRegionCandidate(findRegionById(candidateButton.dataset.regionId));
 });
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+renderAutoSuggestions();
+renderSavedRegions();
+setScoutMode(localStorage.getItem(SCOUT_MODE_KEY) || 'auto');
 renderLearningSummary();
 renderFavorites();
 renderProperties();

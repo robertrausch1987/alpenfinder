@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-  <link rel="stylesheet" href="styles.css?v=20260723-preview" />
+  <link rel="stylesheet" href="styles.css?v=20260723-segments" />
 </head>
 <body>
   <header>
@@ -34,6 +34,29 @@
     <section class="panel" id="panel">
       <div class="panelHead"><h1>Standortprüfung</h1><button id="closePanel" class="ghost">×</button></div>
       <p id="coords" class="muted">Noch kein Standort ausgewählt.</p>
+      <div class="modeSwitch" role="tablist" aria-label="Scout-Modus">
+        <button id="autoModeBtn" class="active" type="button">A: Vorschläge</button>
+        <button id="regionModeBtn" type="button">B: Regionen</button>
+      </div>
+      <section id="autoModePanel" class="modePanel">
+        <div class="modeIntro">
+          <strong>Die App schlägt selbst vor</strong>
+          <span>Regionen, Grundstücksspuren und Häuser werden aus eurem Wunschprofil abgeleitet.</span>
+        </div>
+        <div id="autoSuggestions" class="modeCards"></div>
+      </section>
+      <section id="regionModePanel" class="modePanel hidden">
+        <div class="modeIntro">
+          <strong>Ihr gebt Regionen vor</strong>
+          <span>Gespeicherte Suchräume werden auf Angebote und Off-Market-Spuren geprüft.</span>
+        </div>
+        <label>Regionsname <input id="regionNameInput" placeholder="z. B. Ultental Sonnenhang" /></label>
+        <div class="scoutActions">
+          <button id="saveCurrentRegionBtn" type="button">Aktuelle Region speichern</button>
+          <button id="runRegionsBtn" class="secondary" type="button">Regionen prüfen</button>
+        </div>
+        <div id="savedRegions" class="modeCards"></div>
+      </section>
       <section class="scoutBox" aria-label="Scout-Zentrale">
         <div>
           <strong>Scout-Zentrale</strong>
@@ -104,6 +127,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
-  <script src="app.js?v=20260723-preview"></script>
+  <script src="app.js?v=20260723-segments"></script>
 </body>
 </html>

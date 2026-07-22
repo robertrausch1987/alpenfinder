@@ -201,6 +201,63 @@ body.panelHidden .panel { display: none; }
   border: 1px solid var(--line);
   border-radius: 14px;
 }
+.modeSwitch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 12px 0 10px;
+  padding: 4px;
+  background: #ebe6da;
+  border-radius: 12px;
+}
+.modeSwitch button {
+  background: transparent;
+  color: var(--ink);
+  border-radius: 9px;
+  padding: 10px 8px;
+}
+.modeSwitch button.active {
+  background: #171712;
+  color: #fff;
+}
+.modePanel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.modeIntro {
+  display: grid;
+  gap: 3px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.modeIntro span {
+  color: #706d65;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.modeCards {
+  display: grid;
+  gap: 8px;
+}
+.regionCard {
+  background: #fff;
+}
+.regionTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.regionTags span {
+  background: #f4f1e9;
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 8px;
+}
 .scoutBox > div:first-child {
   display: grid;
   gap: 3px;
