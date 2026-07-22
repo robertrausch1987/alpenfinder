@@ -1,4 +1,4 @@
-const CACHE = 'alpenfinder-v2';
+const CACHE = 'alpenfinder-v3';
 const CORE = [
   './',
   'index.html',

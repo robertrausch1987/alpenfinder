@@ -40,6 +40,14 @@ header span {
 button,
 input,
 select { font: inherit; }
+input,
+select {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+  color: var(--ink);
+}
 button {
   border: 0;
   border-radius: 12px;
@@ -64,6 +72,13 @@ button:disabled { opacity: .4; }
   color: var(--ink);
   font-size: 28px;
   padding: 0 6px;
+}
+.ghost.small {
+  min-width: 38px;
+  font-size: 24px;
+  line-height: 1;
+  background: #fff;
+  border: 1px solid var(--line);
 }
 main {
   height: calc(100% - 58px);
@@ -102,6 +117,26 @@ body.panelHidden .panel { display: none; }
   min-width: 0;
 }
 .searchBox button { padding: 9px 12px; }
+.drawBox {
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 6px;
+  background: #ffffffee;
+  border: 1px solid #0001;
+  border-radius: 14px;
+  padding: 6px;
+  box-shadow: 0 8px 24px #0002;
+}
+.drawBox button {
+  padding: 8px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
 .hint {
   position: absolute;
   bottom: 12px;
@@ -204,6 +239,16 @@ select {
   width: 100%;
   margin-top: 6px;
 }
+input[type=number],
+details input:not([type=range]) {
+  width: 100%;
+  margin-top: 6px;
+}
+input[type=range] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
 .favorite {
   display: flex;
   justify-content: space-between;
@@ -234,6 +279,27 @@ select {
   font-weight: 800;
   margin-top: 8px;
 }
+.sourceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+.source-link {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  background: #ebe6da;
+  color: var(--ink);
+  padding: 10px 8px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 13px;
+}
+.leaflet-draw-toolbar a {
+  width: 32px !important;
+  height: 32px !important;
+}
 @media (max-width: 850px) {
   body.panelHidden main,
   main {
@@ -255,6 +321,16 @@ select {
     white-space: normal;
   }
   .searchBox { top: 9px; }
+  .drawBox {
+    top: 70px;
+    width: calc(100% - 24px);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .drawBox button {
+    min-width: 0;
+    padding: 8px 6px;
+  }
+  .sourceGrid { grid-template-columns: 1fr; }
   .cardRow { align-items: flex-start; }
   .actions button { min-width: 0; }
 }

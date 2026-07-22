@@ -17,16 +17,35 @@ L.control.layers({ Straße: base, Topografie: topo, Satellit: imagery }, null, {
   position: 'bottomleft'
 }).addTo(map);
 
+const drawnItems = new L.FeatureGroup().addTo(map);
+new L.Control.Draw({
+  position: 'topright',
+  draw: false,
+  edit: {
+    featureGroup: drawnItems,
+    edit: true,
+    remove: true
+  }
+}).addTo(map);
+
 let selected = null;
 let marker = null;
 let userLocation = null;
 let userLocationLayer = null;
 let routeLayer = null;
+let activeDrawer = null;
 
 const $ = id => document.getElementById(id);
 const status = $('status');
 const results = $('results');
 const routeResult = $('routeResult');
+
+const areaStyle = {
+  color: '#171712',
+  fillColor: '#6d8f4e',
+  fillOpacity: 0.22,
+  weight: 2
+};
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, char => ({
@@ -38,8 +57,20 @@ function escapeHtml(value) {
   })[char]);
 }
 
-function setSelected(lat, lng, label = 'Ausgewählter Standort') {
-  selected = { lat, lng, label };
+function resetOutput() {
+  results.innerHTML = '';
+  routeResult.innerHTML = '';
+  $('score').classList.add('hidden');
+}
+
+function enableTargetActions(enabled) {
+  ['analyzeBtn', 'routeBtn', 'saveBtn'].forEach(id => {
+    $(id).disabled = !enabled;
+  });
+}
+
+function setSelectedPoint(lat, lng, label = 'Ausgewählter Standort') {
+  selected = { type: 'point', lat, lng, label };
   document.body.classList.remove('panelHidden');
 
   if (marker) marker.remove();
@@ -49,20 +80,104 @@ function setSelected(lat, lng, label = 'Ausgewählter Standort') {
     .openPopup();
   marker.on('dragend', event => {
     const point = event.target.getLatLng();
-    setSelected(point.lat, point.lng, 'Verschobener Standort');
+    setSelectedPoint(point.lat, point.lng, 'Verschobener Standort');
   });
 
   $('coords').textContent = `${label} · ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-  ['analyzeBtn', 'routeBtn', 'saveBtn'].forEach(id => {
-    $(id).disabled = false;
-  });
-  results.innerHTML = '';
-  routeResult.innerHTML = '';
-  $('score').classList.add('hidden');
+  enableTargetActions(true);
+  resetOutput();
   setTimeout(() => map.invalidateSize(), 0);
 }
 
-map.on('click', event => setSelected(event.latlng.lat, event.latlng.lng));
+function getAreaLayers() {
+  return drawnItems.getLayers();
+}
+
+function setSelectedAreas({ fit = false } = {}) {
+  const layers = getAreaLayers();
+  $('clearAreasBtn').disabled = layers.length === 0;
+
+  if (!layers.length) {
+    if (!selected || selected.type === 'areas') {
+      selected = null;
+      $('coords').textContent = 'Noch kein Standort ausgewählt.';
+      enableTargetActions(false);
+      resetOutput();
+    }
+    return;
+  }
+
+  if (marker) {
+    marker.remove();
+    marker = null;
+  }
+
+  const bounds = L.featureGroup(layers).getBounds();
+  const center = bounds.getCenter();
+  const hectares = layers.reduce((sum, layer) => sum + areaInSquareMeters(layer), 0) / 10000;
+  selected = {
+    type: 'areas',
+    lat: center.lat,
+    lng: center.lng,
+    label: layers.length === 1 ? 'Eingezeichnetes Suchgebiet' : `${layers.length} eingezeichnete Suchgebiete`
+  };
+
+  $('coords').textContent = `${selected.label} · ca. ${hectares.toFixed(1)} ha · Mittelpunkt ${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`;
+  enableTargetActions(true);
+  resetOutput();
+  if (fit && bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30] });
+  setTimeout(() => map.invalidateSize(), 0);
+}
+
+function styleAreaLayer(layer) {
+  if (layer.setStyle) layer.setStyle(areaStyle);
+  layer.on('click', event => {
+    L.DomEvent.stopPropagation(event);
+    setSelectedAreas();
+  });
+}
+
+function startDrawing(kind) {
+  if (activeDrawer) activeDrawer.disable();
+  map.closePopup();
+  const options = {
+    shapeOptions: areaStyle,
+    allowIntersection: false,
+    showArea: true,
+    metric: true
+  };
+
+  if (kind === 'polygon') activeDrawer = new L.Draw.Polygon(map, options);
+  if (kind === 'rectangle') activeDrawer = new L.Draw.Rectangle(map, { shapeOptions: areaStyle, metric: true });
+  if (kind === 'circle') activeDrawer = new L.Draw.Circle(map, { shapeOptions: areaStyle, metric: true });
+  activeDrawer.enable();
+  status.textContent = 'Suchgebiet auf der Karte einzeichnen.';
+}
+
+map.on('click', event => {
+  if (!activeDrawer) setSelectedPoint(event.latlng.lat, event.latlng.lng);
+});
+map.on(L.Draw.Event.CREATED, event => {
+  const layer = event.layer;
+  styleAreaLayer(layer);
+  drawnItems.addLayer(layer);
+  setSelectedAreas({ fit: true });
+  status.textContent = 'Suchgebiet hinzugefügt. Weitere Gebiete können zusätzlich eingezeichnet werden.';
+});
+map.on(L.Draw.Event.EDITED, () => setSelectedAreas());
+map.on(L.Draw.Event.DELETED, () => setSelectedAreas());
+map.on(L.Draw.Event.DRAWSTOP, () => {
+  activeDrawer = null;
+});
+
+$('drawPolygonBtn').onclick = () => startDrawing('polygon');
+$('drawRectBtn').onclick = () => startDrawing('rectangle');
+$('drawCircleBtn').onclick = () => startDrawing('circle');
+$('clearAreasBtn').onclick = () => {
+  drawnItems.clearLayers();
+  setSelectedAreas();
+  status.textContent = 'Suchgebiete gelöscht.';
+};
 
 function locateUser({ moveMap = true } = {}) {
   if (!navigator.geolocation) {
@@ -115,7 +230,7 @@ async function search() {
   status.textContent = 'Suche…';
   try {
     const firstResult = await searchPlace(query);
-    setSelected(firstResult.lat, firstResult.lng, firstResult.label);
+    setSelectedPoint(firstResult.lat, firstResult.lng, firstResult.label);
     map.setView([firstResult.lat, firstResult.lng], 15);
     status.textContent = '';
   } catch (error) {
@@ -129,7 +244,7 @@ async function searchPlace(query) {
 
   try {
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=it&accept-language=de&q=${encoded}`
+      `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=it,at,ch,de&accept-language=de&q=${encoded}`
     );
     if (response.ok) {
       const data = await response.json();
@@ -150,7 +265,7 @@ async function searchPlace(query) {
   if (!response.ok) throw new Error('Search failed');
 
   const data = await response.json();
-  const feature = data.features.find(item => item.properties.countrycode === 'IT') || data.features[0];
+  const feature = data.features.find(item => ['IT', 'AT', 'CH', 'DE'].includes(item.properties.countrycode)) || data.features[0];
   if (!feature) throw new Error('Kein Treffer');
 
   const [lng, lat] = feature.geometry.coordinates;
@@ -162,6 +277,21 @@ async function searchPlace(query) {
     lng: Number(lng),
     label: [...new Set(labelParts)].join(', ')
   };
+}
+
+async function reversePlace(lat, lng) {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=12&accept-language=de`
+    );
+    if (!response.ok) throw new Error('Reverse lookup failed');
+    const data = await response.json();
+    const address = data.address || {};
+    return address.village || address.town || address.city || address.municipality || address.county || data.display_name || '';
+  } catch (error) {
+    console.warn('Reverse lookup failed', error);
+    return '';
+  }
 }
 
 function destinationSamples(lat, lng, distance = 60) {
@@ -180,8 +310,10 @@ async function elevations(points) {
   return (await response.json()).elevation;
 }
 
-async function overpass(lat, lng) {
-  const query = `[out:json][timeout:20];(way(around:500,${lat},${lng})[highway];way(around:500,${lat},${lng})[waterway];node(around:500,${lat},${lng})[natural=spring];way(around:250,${lat},${lng})[building];);out center tags;`;
+async function overpass(lat, lng, radius = 500) {
+  const roadRadius = Math.round(Math.max(500, Math.min(radius, 5000)));
+  const buildingRadius = Math.round(Math.max(250, Math.min(radius, 1500)));
+  const query = `[out:json][timeout:25];(way(around:${roadRadius},${lat},${lng})[highway];way(around:${roadRadius},${lat},${lng})[waterway];node(around:${roadRadius},${lat},${lng})[natural=spring];way(around:${buildingRadius},${lat},${lng})[building];);out center tags;`;
   const endpoints = [
     'https://overpass-api.de/api/interpreter',
     'https://z.overpass-api.de/api/interpreter',
@@ -229,6 +361,7 @@ function aspectFromElev(elevationsList) {
   const deg = (Math.atan2(dzdx, dzdy) * 180 / Math.PI + 180) % 360;
   const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   return {
+    elevation: center,
     deg,
     name: names[Math.round(deg / 45) % 8],
     slope: Math.atan(Math.sqrt(dzdx * dzdx + dzdy * dzdy)) * 180 / Math.PI
@@ -249,77 +382,228 @@ function metric(title, value, state, detail = '') {
   return `<div class="card"><div class="cardRow"><strong>${escapeHtml(title)}</strong><span class="badge ${state}">${escapeHtml(value)}</span></div>${detail ? `<div class="muted">${escapeHtml(detail)}</div>` : ''}</div>`;
 }
 
+function linkCard(title, detail, links) {
+  const buttons = links.map(link => `<a class="source-link" target="_blank" rel="noopener" href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`).join('');
+  return `<div class="card"><div class="cardRow"><strong>${escapeHtml(title)}</strong><span class="badge good">Live</span></div><div class="muted">${escapeHtml(detail)}</div><div class="sourceGrid">${buttons}</div></div>`;
+}
+
+function layerCenter(layer) {
+  if (layer instanceof L.Circle) return layer.getLatLng();
+  return layer.getBounds().getCenter();
+}
+
+function layerRadius(layer) {
+  if (layer instanceof L.Circle) return layer.getRadius();
+  const bounds = layer.getBounds();
+  const center = bounds.getCenter();
+  const corners = [
+    bounds.getNorthWest(),
+    bounds.getNorthEast(),
+    bounds.getSouthWest(),
+    bounds.getSouthEast()
+  ];
+  return Math.max(...corners.map(point => hav(center.lat, center.lng, point.lat, point.lng)));
+}
+
+function areaInSquareMeters(layer) {
+  if (layer instanceof L.Circle) return Math.PI * layer.getRadius() * layer.getRadius();
+  const latLngs = layer.getLatLngs()[0] || [];
+  if (latLngs.length < 3) return 0;
+  const origin = latLngs[0];
+  const points = latLngs.map(point => {
+    const x = hav(origin.lat, origin.lng, origin.lat, point.lng) * (point.lng < origin.lng ? -1 : 1);
+    const y = hav(origin.lat, origin.lng, point.lat, origin.lng) * (point.lat < origin.lat ? -1 : 1);
+    return { x, y };
+  });
+  let sum = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const next = points[(index + 1) % points.length];
+    sum += points[index].x * next.y - next.x * points[index].y;
+  }
+  return Math.abs(sum / 2);
+}
+
+function pointInPolygon(point, polygon) {
+  const latLngs = polygon.getLatLngs()[0] || [];
+  let inside = false;
+  for (let i = 0, j = latLngs.length - 1; i < latLngs.length; j = i, i += 1) {
+    const xi = latLngs[i].lng;
+    const yi = latLngs[i].lat;
+    const xj = latLngs[j].lng;
+    const yj = latLngs[j].lat;
+    const intersects = ((yi > point.lat) !== (yj > point.lat)) &&
+      (point.lng < (xj - xi) * (point.lat - yi) / (yj - yi) + xi);
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function samplesForLayer(layer) {
+  const center = layerCenter(layer);
+  if (layer instanceof L.Circle) {
+    const radius = Math.min(layer.getRadius() * 0.55, 800);
+    const dy = radius / 111320;
+    const dx = radius / (111320 * Math.cos(center.lat * Math.PI / 180));
+    return [
+      [center.lat, center.lng],
+      [center.lat + dy, center.lng],
+      [center.lat - dy, center.lng],
+      [center.lat, center.lng + dx],
+      [center.lat, center.lng - dx]
+    ];
+  }
+
+  const bounds = layer.getBounds();
+  const samples = [[center.lat, center.lng]];
+  for (const latFactor of [0.25, 0.5, 0.75]) {
+    for (const lngFactor of [0.25, 0.5, 0.75]) {
+      const lat = bounds.getSouth() + (bounds.getNorth() - bounds.getSouth()) * latFactor;
+      const lng = bounds.getWest() + (bounds.getEast() - bounds.getWest()) * lngFactor;
+      if (pointInPolygon({ lat, lng }, layer)) samples.push([lat, lng]);
+    }
+  }
+  return samples.slice(0, 5);
+}
+
+function currentProfile() {
+  return {
+    livingMin: $('livingMin').value.trim(),
+    plotMin: $('plotMin').value.trim(),
+    buildingType: $('buildingType').value,
+    yearFrom: $('yearFrom').value.trim(),
+    locationPref: $('locationPref').value.trim()
+  };
+}
+
+function profileTerms(profile) {
+  return [
+    profile.buildingType || 'Immobilie',
+    profile.livingMin ? `ab ${profile.livingMin} m2 Wohnfläche` : '',
+    profile.plotMin ? `ab ${profile.plotMin} m2 Grundstück` : '',
+    profile.yearFrom ? `Baujahr ab ${profile.yearFrom}` : '',
+    profile.locationPref
+  ].filter(Boolean);
+}
+
+function sourceSearchUrl(sourceDomain, query) {
+  return `https://www.google.com/search?q=${encodeURIComponent(`${query} site:${sourceDomain}`)}`;
+}
+
+function propertySourceCard(placeLabel) {
+  const profile = currentProfile();
+  const place = placeLabel || selected?.label || 'Alpenregion';
+  const query = [...profileTerms(profile), place, 'kaufen'].join(' ');
+  const allDomains = [
+    'immobiliare.it',
+    'idealista.it',
+    'casa.it',
+    'subito.it',
+    'immoscout24.at',
+    'willhaben.at',
+    'immoscout24.ch'
+  ];
+  const links = [
+    {
+      label: 'Alle Quellen',
+      href: `https://www.google.com/search?q=${encodeURIComponent(`${query} (${allDomains.map(domain => `site:${domain}`).join(' OR ')})`)}`
+    },
+    { label: 'Immobiliare', href: sourceSearchUrl('immobiliare.it', query) },
+    { label: 'Idealista', href: sourceSearchUrl('idealista.it', query) },
+    { label: 'Casa.it', href: sourceSearchUrl('casa.it', query) },
+    { label: 'Subito', href: sourceSearchUrl('subito.it', query) },
+    { label: 'AT/CH Portale', href: `https://www.google.com/search?q=${encodeURIComponent(`${query} (site:immoscout24.at OR site:willhaben.at OR site:immoscout24.ch)`)}` }
+  ];
+  const detail = 'Vorgefilterte Live-Suche nach dem Wunschprofil. Für eine echte Angebotsliste direkt in AlpenFinder braucht es einen freigegebenen Portal- oder Such-API-Zugang.';
+  return linkCard('Aktuelle Immobilienangebote', detail, links);
+}
+
+async function analyzeSamples(samplePoints, center, radius, label, areaDescription = '') {
+  const terrainResults = await Promise.allSettled(
+    samplePoints.map(point => elevations(destinationSamples(point[0], point[1])))
+  );
+  const terrains = terrainResults
+    .filter(result => result.status === 'fulfilled')
+    .map(result => aspectFromElev(result.value));
+  if (!terrains.length) throw new Error('Höhendienst nicht erreichbar');
+
+  const [mapResult, reverseResult] = await Promise.allSettled([
+    overpass(center.lat, center.lng, radius),
+    reversePlace(center.lat, center.lng)
+  ]);
+  const mapElements = mapResult.status === 'fulfilled' ? mapResult.value : [];
+  const mapDetailsAvailable = mapResult.status === 'fulfilled';
+  const placeLabel = reverseResult.status === 'fulfilled' ? reverseResult.value : label;
+
+  const avgElevation = terrains.reduce((sum, terrain) => sum + terrain.elevation, 0) / terrains.length;
+  const avgSlope = terrains.reduce((sum, terrain) => sum + terrain.slope, 0) / terrains.length;
+  const primaryAspect = terrains.reduce((best, terrain) => {
+    const count = terrains.filter(item => item.name === terrain.name).length;
+    return count > best.count ? { name: terrain.name, deg: terrain.deg, count } : best;
+  }, { name: terrains[0].name, deg: terrains[0].deg, count: 0 });
+
+  const road = nearestDistance(mapElements, center.lat, center.lng, element => element.tags && element.tags.highway);
+  const spring = nearestDistance(mapElements, center.lat, center.lng, element => element.tags && element.tags.natural === 'spring');
+  const water = nearestDistance(mapElements, center.lat, center.lng, element => element.tags && element.tags.waterway);
+  const buildings = mapElements.filter(element => element.tags && element.tags.building).length;
+  const winter = sunHours(center.lat, center.lng, new Date('2026-12-21T00:00:00'));
+  const summer = sunHours(center.lat, center.lng, new Date('2026-06-21T00:00:00'));
+  const slopeMax = Number($('slopeMax').value);
+  const roadMax = Number($('roadMax').value);
+  const aspectPref = $('aspectPref').value;
+
+  let score = 0;
+  score += Math.max(0, 30 - avgSlope / slopeMax * 20);
+  score += road == null ? 5 : Math.max(0, 25 - road / roadMax * 20);
+  score += Math.min(20, winter / 8 * 20);
+  score += aspectPref === 'ANY' ? 15 : (primaryAspect.name.includes(aspectPref) || primaryAspect.name === aspectPref ? 15 : 5);
+  score += buildings ? 10 : 3;
+  score = Math.round(Math.min(100, score));
+
+  $('score').innerHTML = `<div><div>Gesamteignung</div><small>${escapeHtml(label)}</small></div><strong>${score}/100</strong>`;
+  $('score').classList.remove('hidden');
+  results.innerHTML =
+    (areaDescription ? metric('Suchbereich', areaDescription, 'good', `${samplePoints.length} Stichpunkte wurden innerhalb der Fläche geprüft.`) : '') +
+    metric('Höhenlage', `Ø ${Math.round(avgElevation)} m`, 'good') +
+    metric(
+      'Hangneigung',
+      `Ø ${avgSlope.toFixed(1)}°`,
+      avgSlope <= slopeMax ? 'good' : avgSlope <= slopeMax + 8 ? 'warn' : 'bad',
+      terrains.length === 1 ? 'Aus fünf Höhenpunkten im Umkreis von etwa 60 m geschätzt.' : 'Aus mehreren Stichpunkten innerhalb des Suchgebiets geschätzt.'
+    ) +
+    metric('Hangausrichtung', `${primaryAspect.name} · ${Math.round(primaryAspect.deg)}°`, ['S', 'SE', 'SW'].includes(primaryAspect.name) ? 'good' : 'warn') +
+    metric('Astronomische Sonne', `${winter.toFixed(1)} h Winter / ${summer.toFixed(1)} h Sommer`, 'good', 'Noch ohne exakte Abschattung durch gegenüberliegende Berge.') +
+    metric('Nächster kartierter Weg', !mapDetailsAvailable ? 'Kartendienst nicht erreichbar' : road == null ? 'nicht ermittelt' : `${Math.round(road)} m`, mapDetailsAvailable && road != null && road <= roadMax ? 'good' : 'warn', 'Kartierung beweist weder Befahrbarkeit noch Wegerecht.') +
+    metric('Wasserhinweise', !mapDetailsAvailable ? 'Kartendienst nicht erreichbar' : spring != null ? `Quelle ca. ${Math.round(spring)} m` : water != null ? `Gewässer ca. ${Math.round(water)} m` : 'kein Eintrag im Suchradius', spring != null ? 'good' : water != null ? 'warn' : 'bad') +
+    metric('Gebäudeumfeld', !mapDetailsAvailable ? 'Kartendienst nicht erreichbar' : `${buildings} kartierte Gebäude`, mapDetailsAvailable && buildings > 0 ? 'good' : 'warn', 'Anzahl im ungefähren Suchradius.') +
+    propertySourceCard(placeLabel || label);
+
+  status.textContent = mapDetailsAvailable
+    ? 'Analyse abgeschlossen.'
+    : 'Analyse abgeschlossen. Weg-, Wasser- und Gebäudehinweise konnten temporär nicht geladen werden.';
+}
+
 $('analyzeBtn').onclick = async () => {
   if (!selected) return;
 
-  status.textContent = 'Gelände, Sonne und Umgebung werden geprüft…';
+  status.textContent = 'Gelände, Sonne, Umgebung und Angebotsquellen werden geprüft…';
   results.innerHTML = '';
+  routeResult.innerHTML = '';
   try {
-    const points = destinationSamples(selected.lat, selected.lng);
-    const [elevationResult, mapResult] = await Promise.allSettled([
-      elevations(points),
-      overpass(selected.lat, selected.lng)
-    ]);
-    if (elevationResult.status === 'rejected') throw elevationResult.reason;
+    if (selected.type === 'areas') {
+      const layers = getAreaLayers();
+      const bounds = L.featureGroup(layers).getBounds();
+      const center = bounds.getCenter();
+      const samples = layers.flatMap(layer => samplesForLayer(layer)).slice(0, 12);
+      const radius = Math.max(...layers.map(layer => layerRadius(layer)), 500);
+      const hectares = layers.reduce((sum, layer) => sum + areaInSquareMeters(layer), 0) / 10000;
+      await analyzeSamples(samples, center, radius, selected.label, `${layers.length} Gebiet(e), ca. ${hectares.toFixed(1)} ha`);
+      return;
+    }
 
-    const elevationValues = elevationResult.value;
-    const mapElements = mapResult.status === 'fulfilled' ? mapResult.value : [];
-    const mapDetailsAvailable = mapResult.status === 'fulfilled';
-    const terrain = aspectFromElev(elevationValues);
-    const road = nearestDistance(
-      mapElements,
-      selected.lat,
-      selected.lng,
-      element => element.tags && element.tags.highway
-    );
-    const spring = nearestDistance(
-      mapElements,
-      selected.lat,
-      selected.lng,
-      element => element.tags && element.tags.natural === 'spring'
-    );
-    const water = nearestDistance(
-      mapElements,
-      selected.lat,
-      selected.lng,
-      element => element.tags && element.tags.waterway
-    );
-    const buildings = mapElements.filter(element => element.tags && element.tags.building).length;
-    const winter = sunHours(selected.lat, selected.lng, new Date('2026-12-21T00:00:00'));
-    const summer = sunHours(selected.lat, selected.lng, new Date('2026-06-21T00:00:00'));
-    const slopeMax = Number($('slopeMax').value);
-    const roadMax = Number($('roadMax').value);
-    const aspectPref = $('aspectPref').value;
-
-    let score = 0;
-    score += Math.max(0, 30 - terrain.slope / slopeMax * 20);
-    score += road == null ? 5 : Math.max(0, 25 - road / roadMax * 20);
-    score += Math.min(20, winter / 8 * 20);
-    score += aspectPref === 'ANY' ? 15 : (terrain.name.includes(aspectPref) || terrain.name === aspectPref ? 15 : 5);
-    score += buildings ? 10 : 3;
-    score = Math.round(Math.min(100, score));
-
-    $('score').innerHTML = `<div><div>Gesamteignung</div><small>automatische Vorprüfung</small></div><strong>${score}/100</strong>`;
-    $('score').classList.remove('hidden');
-    results.innerHTML =
-      metric('Höhenlage', `${Math.round(elevationValues[0])} m`, 'good') +
-      metric(
-        'Lokale Hangneigung',
-        `${terrain.slope.toFixed(1)}°`,
-        terrain.slope <= slopeMax ? 'good' : terrain.slope <= slopeMax + 8 ? 'warn' : 'bad',
-        'Aus fünf Höhenpunkten im Umkreis von etwa 60 m geschätzt.'
-      ) +
-      metric('Hangausrichtung', `${terrain.name} · ${Math.round(terrain.deg)}°`, ['S', 'SE', 'SW'].includes(terrain.name) ? 'good' : 'warn') +
-      metric('Astronomische Sonne', `${winter.toFixed(1)} h Winter / ${summer.toFixed(1)} h Sommer`, 'good', 'Noch ohne exakte Abschattung durch gegenüberliegende Berge.') +
-      metric('Nächster kartierter Weg', !mapDetailsAvailable ? 'Kartendienst nicht erreichbar' : road == null ? 'nicht ermittelt' : `${Math.round(road)} m`, mapDetailsAvailable && road != null && road <= roadMax ? 'good' : 'warn', 'Kartierung beweist weder Befahrbarkeit noch Wegerecht.') +
-      metric('Wasserhinweise', !mapDetailsAvailable ? 'Kartendienst nicht erreichbar' : spring != null ? `Quelle ca. ${Math.round(spring)} m` : water != null ? `Gewässer ca. ${Math.round(water)} m` : 'kein Eintrag im 500-m-Radius', spring != null ? 'good' : water != null ? 'warn' : 'bad') +
-      metric('Gebäudeumfeld', !mapDetailsAvailable ? 'Kartendienst nicht erreichbar' : `${buildings} kartierte Gebäude`, mapDetailsAvailable && buildings > 0 ? 'good' : 'warn', 'Anzahl im ungefähren 250-m-Radius.');
-    status.textContent = mapDetailsAvailable
-      ? 'Analyse abgeschlossen.'
-      : 'Analyse abgeschlossen. Weg-, Wasser- und Gebäudehinweise konnten temporär nicht geladen werden.';
+    await analyzeSamples([[selected.lat, selected.lng]], selected, 500, selected.label);
   } catch (error) {
     console.error(error);
-    status.textContent = 'Ein Teil der öffentlichen Kartendienste war nicht erreichbar. Bitte erneut versuchen.';
+    status.textContent = 'Ein Teil der öffentlichen Dienste war nicht erreichbar. Bitte erneut versuchen.';
   }
 };
 
@@ -331,7 +615,7 @@ $('routeBtn').onclick = async () => {
     const origin = userLocation || await locateUser({ moveMap: false });
     const destination = selected;
 
-    status.textContent = 'Anfahrt wird geprüft…';
+    status.textContent = selected.type === 'areas' ? 'Anfahrt zum Mittelpunkt wird geprüft…' : 'Anfahrt wird geprüft…';
     const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson&steps=true`;
     const response = await fetch(url);
     if (!response.ok) throw new Error('Route failed');
@@ -369,10 +653,35 @@ $('routeBtn').onclick = async () => {
   }
 };
 
+function layerToStored(layer) {
+  if (layer instanceof L.Circle) {
+    const center = layer.getLatLng();
+    return { type: 'circle', center: [center.lat, center.lng], radius: layer.getRadius() };
+  }
+  return { type: 'polygon', latlngs: (layer.getLatLngs()[0] || []).map(point => [point.lat, point.lng]) };
+}
+
+function storedToLayer(area) {
+  if (area.type === 'circle') return L.circle(area.center, { radius: area.radius, ...areaStyle });
+  return L.polygon(area.latlngs, areaStyle);
+}
+
 $('saveBtn').onclick = () => {
   if (!selected) return;
   const favorites = JSON.parse(localStorage.getItem('alpenFavorites') || '[]');
-  favorites.unshift({ ...selected, date: new Date().toISOString() });
+  if (selected.type === 'areas') {
+    favorites.unshift({
+      type: 'areas',
+      label: selected.label,
+      lat: selected.lat,
+      lng: selected.lng,
+      areas: getAreaLayers().map(layerToStored),
+      profile: currentProfile(),
+      date: new Date().toISOString()
+    });
+  } else {
+    favorites.unshift({ ...selected, date: new Date().toISOString() });
+  }
   localStorage.setItem('alpenFavorites', JSON.stringify(favorites.slice(0, 30)));
   renderFavorites();
   status.textContent = 'Favorit gespeichert.';
@@ -381,7 +690,12 @@ $('saveBtn').onclick = () => {
 function renderFavorites() {
   const favorites = JSON.parse(localStorage.getItem('alpenFavorites') || '[]');
   $('favorites').innerHTML = favorites.length
-    ? favorites.map((favorite, index) => `<div class="favorite"><div><strong>${escapeHtml(favorite.label.split(',')[0])}</strong><div class="muted">${favorite.lat.toFixed(5)}, ${favorite.lng.toFixed(5)}</div></div><button onclick="openFav(${index})">Öffnen</button></div>`).join('')
+    ? favorites.map((favorite, index) => {
+      const isArea = favorite.type === 'areas';
+      const title = isArea ? favorite.label : favorite.label.split(',')[0];
+      const subtitle = isArea ? `${favorite.areas.length} Gebiet(e)` : `${favorite.lat.toFixed(5)}, ${favorite.lng.toFixed(5)}`;
+      return `<div class="favorite"><div><strong>${escapeHtml(title)}</strong><div class="muted">${escapeHtml(subtitle)}</div></div><button onclick="openFav(${index})">Öffnen</button></div>`;
+    }).join('')
     : '<div class="muted">Noch keine Standorte gespeichert.</div>';
 }
 
@@ -390,7 +704,25 @@ window.openFav = index => {
   const favorite = favorites[index];
   if (!favorite) return;
 
-  setSelected(favorite.lat, favorite.lng, favorite.label);
+  if (favorite.type === 'areas') {
+    drawnItems.clearLayers();
+    favorite.areas.map(storedToLayer).forEach(layer => {
+      styleAreaLayer(layer);
+      drawnItems.addLayer(layer);
+    });
+    if (favorite.profile) {
+      $('livingMin').value = favorite.profile.livingMin || '';
+      $('plotMin').value = favorite.profile.plotMin || '';
+      $('buildingType').value = favorite.profile.buildingType || '';
+      $('yearFrom').value = favorite.profile.yearFrom || '';
+      $('locationPref').value = favorite.profile.locationPref || '';
+    }
+    setSelectedAreas({ fit: true });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  setSelectedPoint(favorite.lat, favorite.lng, favorite.label);
   map.setView([favorite.lat, favorite.lng], 16);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };

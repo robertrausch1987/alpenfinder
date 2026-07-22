@@ -8,6 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -22,7 +23,13 @@
         <input id="searchInput" placeholder="Ort, Hof oder Adresse suchen" />
         <button id="searchBtn">Suchen</button>
       </div>
-      <div class="hint">Auf die Karte tippen, um einen Standort zu prüfen.</div>
+      <div class="drawBox" aria-label="Suchgebiet einzeichnen">
+        <button id="drawPolygonBtn" class="secondary" type="button">Fläche</button>
+        <button id="drawRectBtn" class="secondary" type="button">Rechteck</button>
+        <button id="drawCircleBtn" class="secondary" type="button">Radius</button>
+        <button id="clearAreasBtn" class="ghost small" type="button" disabled>×</button>
+      </div>
+      <div class="hint">Ort suchen, Punkt antippen oder Suchgebiet einzeichnen.</div>
     </section>
     <section class="panel" id="panel">
       <div class="panelHead"><h1>Standortprüfung</h1><button id="closePanel" class="ghost">×</button></div>
@@ -44,11 +51,29 @@
           <select id="aspectPref"><option value="S">Süd</option><option value="SW">Südwest</option><option value="SE">Südost</option><option value="ANY">egal</option></select>
         </label>
       </details>
+      <details open>
+        <summary>Wunschobjekt definieren</summary>
+        <label>Wohnfläche min. <input id="livingMin" type="number" inputmode="numeric" min="0" step="10" placeholder="z. B. 90" /></label>
+        <label>Grundstück min. <input id="plotMin" type="number" inputmode="numeric" min="0" step="50" placeholder="z. B. 800" /></label>
+        <label>Gebäudeart
+          <select id="buildingType">
+            <option value="">egal</option>
+            <option value="Haus">Haus</option>
+            <option value="Bauernhof">Bauernhof</option>
+            <option value="Hofstelle">Hofstelle</option>
+            <option value="Grundstück">Grundstück</option>
+            <option value="Chalet">Chalet</option>
+          </select>
+        </label>
+        <label>Baujahr ab <input id="yearFrom" type="number" inputmode="numeric" min="1600" max="2100" step="1" placeholder="z. B. 1970" /></label>
+        <label>Lagewunsch <input id="locationPref" placeholder="ruhig, alleinlage, bergblick..." /></label>
+      </details>
       <div class="favorites"><h2>Favoriten</h2><div id="favorites"></div></div>
       <p class="disclaimer">Vorprüfung, keine rechtliche, bauliche oder sicherheitstechnische Zusage. Zufahrtsrechte, Winterdienst, Naturgefahren, Wasser und Bebaubarkeit müssen vor Ort und amtlich geprüft werden.</p>
     </section>
   </main>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
   <script src="app.js"></script>
 </body>
