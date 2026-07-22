@@ -417,6 +417,65 @@ input[type=range] {
   font-weight: 800;
   font-size: 13px;
 }
+.sourceSection .cardRow {
+  align-items: flex-start;
+}
+.sourcePreviewGrid {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.sourcePreview {
+  display: grid;
+  gap: 8px;
+  background: #f9f7f1;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px;
+}
+.sourcePreviewTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sourcePreviewTop span {
+  color: var(--good);
+  font-size: 12px;
+  font-weight: 800;
+}
+.sourcePreview p {
+  margin: 0;
+  color: #555148;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.sourcePreviewMeta {
+  color: #706d65;
+  font-size: 12px;
+}
+.sourcePreviewActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.sourcePreviewActions a {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 8px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 13px;
+}
+.sourcePreviewActions button {
+  padding: 10px 8px;
+  font-size: 13px;
+}
+.listingPreview {
+  margin: 12px 0;
+}
 .learningCard label {
   margin-top: 10px;
 }
@@ -503,6 +562,7 @@ input[type=range] {
     padding: 8px 6px;
   }
   .sourceGrid { grid-template-columns: 1fr; }
+  .sourcePreviewActions { grid-template-columns: 1fr; }
   .learnStats { grid-template-columns: 1fr; }
   .scoutStats,
   .scoutActions { grid-template-columns: 1fr 1fr; }

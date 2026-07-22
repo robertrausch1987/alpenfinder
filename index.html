@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-  <link rel="stylesheet" href="styles.css?v=20260723-autoscout" />
+  <link rel="stylesheet" href="styles.css?v=20260723-preview" />
 </head>
 <body>
   <header>
@@ -54,13 +54,14 @@
       <div id="score" class="score hidden"></div>
       <div id="results" class="cards"></div>
       <div id="routeResult" class="cards"></div>
-      <details>
-        <summary>Öffentliches Objekt aufnehmen</summary>
+      <details open>
+        <summary>Objektlink einfügen</summary>
         <label>Titel <input id="listingTitle" placeholder="z. B. Alter Hof mit Nebengebäude" /></label>
         <label>Link zum Angebot <input id="listingUrl" inputmode="url" placeholder="https://..." /></label>
         <label>Preis <input id="listingPrice" inputmode="numeric" placeholder="z. B. 850000" /></label>
         <label>Adresse / Ort <input id="listingAddress" placeholder="falls im Angebot sichtbar" /></label>
         <label>Notizen <textarea id="listingNotes" rows="3" placeholder="Was fällt auf? Panorama, Zustand, Nebengebäude, Risiken..."></textarea></label>
+        <div id="listingPreview" class="listingPreview hidden"></div>
         <button id="saveListingBtn" type="button">Objekt bewerten und speichern</button>
       </details>
       <div class="properties"><h2>Objektkandidaten</h2><div id="properties"></div></div>
@@ -103,6 +104,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
-  <script src="app.js?v=20260723-autoscout"></script>
+  <script src="app.js?v=20260723-preview"></script>
 </body>
 </html>

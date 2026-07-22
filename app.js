@@ -485,6 +485,24 @@ function linkCard(title, detail, links) {
   return `<div class="card"><div class="cardRow"><strong>${escapeHtml(title)}</strong><span class="badge good">Live</span></div><div class="muted">${escapeHtml(detail)}</div><div class="sourceGrid">${buttons}</div></div>`;
 }
 
+function sourcePreviewSection(title, detail, previews) {
+  const cards = previews.map(preview => `
+    <article class="sourcePreview">
+      <div class="sourcePreviewTop">
+        <strong>${escapeHtml(preview.title)}</strong>
+        <span>${escapeHtml(preview.badge || 'Vorschau')}</span>
+      </div>
+      <p>${escapeHtml(preview.description)}</p>
+      <div class="sourcePreviewMeta">${escapeHtml(preview.meta)}</div>
+      <div class="sourcePreviewActions">
+        <button type="button" class="secondary saveSearchCandidate" data-title="${escapeHtml(preview.title)}" data-url="${escapeHtml(preview.href)}" data-notes="${escapeHtml(preview.description)}">Merken</button>
+        <a target="_blank" rel="noopener" href="${escapeHtml(preview.href)}">Original öffnen</a>
+      </div>
+    </article>
+  `).join('');
+  return `<div class="card sourceSection"><div class="cardRow"><strong>${escapeHtml(title)}</strong><span class="badge good">Live</span></div><div class="muted">${escapeHtml(detail)}</div><div class="sourcePreviewGrid">${cards}</div></div>`;
+}
+
 function learningCard() {
   return `<div class="card learningCard">
     <div class="cardRow"><strong>Angebot kommentieren</strong><span class="badge good">lernt</span></div>
@@ -750,28 +768,31 @@ function propertySourceCard(placeLabel) {
     'willhaben.at',
     'immoscout24.ch'
   ];
-  const links = [
+  const marketPreviews = [
     {
-      label: 'Alle Quellen',
+      title: 'Alle relevanten Quellen',
+      badge: 'Meta',
+      description: `Sucht marktöffentliche Treffer für ${place} mit Refugium-Profil und Ausschlüssen.`,
+      meta: 'Portalübergreifende Suche',
       href: `https://www.google.com/search?q=${encodeURIComponent(`${query} (${allDomains.map(domain => `site:${domain}`).join(' OR ')})`)}`
     },
-    { label: 'Immobiliare', href: sourceSearchUrl('immobiliare.it', query) },
-    { label: 'Idealista', href: sourceSearchUrl('idealista.it', query) },
-    { label: 'Casa.it', href: sourceSearchUrl('casa.it', query) },
-    { label: 'Subito', href: sourceSearchUrl('subito.it', query) },
-    { label: 'AT/CH Portale', href: `https://www.google.com/search?q=${encodeURIComponent(`${query} (site:immoscout24.at OR site:willhaben.at OR site:immoscout24.ch)`)}` }
+    { title: 'Immobiliare.it', description: `Italienische Angebote rund um ${place}, gefiltert auf Hof, Refugium, Natur und Panorama.`, meta: 'Marktangebot', href: sourceSearchUrl('immobiliare.it', query) },
+    { title: 'Idealista', description: `Weitere Marktangebote mit Fokus auf Lage, Grundstück und Charakter.`, meta: 'Marktangebot', href: sourceSearchUrl('idealista.it', query) },
+    { title: 'Casa.it', description: `Zusätzliche italienische Angebotsquelle für Häuser, Höfe und Grundstücke.`, meta: 'Marktangebot', href: sourceSearchUrl('casa.it', query) },
+    { title: 'Subito', description: `Lokale Anzeigen und private Inserate prüfen.`, meta: 'Kleinanzeigen', href: sourceSearchUrl('subito.it', query) },
+    { title: 'AT/CH Portale', description: `Grenznahe Alpenregionen in Österreich und Schweiz mit demselben Suchprofil.`, meta: 'Erweiterte Region', href: `https://www.google.com/search?q=${encodeURIComponent(`${query} (site:immoscout24.at OR site:willhaben.at OR site:immoscout24.ch)`)}` }
   ];
-  const offMarketLinks = [
-    { label: 'Satellit prüfen', href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}` },
-    { label: 'Kataster/Flurstücke', href: `https://www.google.com/search?q=${encodeURIComponent(`${offMarket} Südtirol Kataster Grundbuch`)}` },
-    { label: 'Off-Market Hinweise', href: `https://www.google.com/search?q=${encodeURIComponent(offMarket)}` }
+  const offMarketPreviews = [
+    { title: 'Satellitenprüfung', badge: 'Karte', description: `Gebäude, Hofstellen und freie Grundstücke um ${place} visuell prüfen.`, meta: 'Off-Market Recherche', href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}` },
+    { title: 'Kataster-/Flurstückspur', badge: 'Prüfung', description: `Legale Hinweise zu Flurstücken, Kataster und Grundbuch vorbereiten.`, meta: 'Keine Eigentümerdaten ohne Freigabe', href: `https://www.google.com/search?q=${encodeURIComponent(`${offMarket} Südtirol Kataster Grundbuch`)}` },
+    { title: 'Off-Market Hinweise', badge: 'Recherche', description: `Nicht inserierte Hofstellen, Sonderimmobilien und Grundstückshinweise suchen.`, meta: 'Vorqualifizierung', href: `https://www.google.com/search?q=${encodeURIComponent(offMarket)}` }
   ];
   const detail = learnedParts.length
     ? `Vorgefilterte Live-Suche nach Wunschprofil und gelerntem Feedback (${learnedParts.join(' / ')}).`
     : 'Vorgefilterte Live-Suche nach Wunschprofil. Kommentare zu Angeboten verbessern die nächsten Suchen.';
   const offMarketDetail = 'Separate Spur für Objekte, die nicht sichtbar angeboten werden: Hofstellen, Gebäude und Grundstücke werden über Satellit, Karte und Katasterhinweise weiter geprüft.';
-  return linkCard('A) Am Markt angebotene Objekte', detail, links) +
-    linkCard('B) Off-Market-Kandidaten', offMarketDetail, offMarketLinks) +
+  return sourcePreviewSection('A) Markt-Vorschauen', detail, marketPreviews) +
+    sourcePreviewSection('B) Off-Market-Vorschauen', offMarketDetail, offMarketPreviews) +
     learningCard();
 }
 
@@ -821,7 +842,7 @@ function refreshPropertySources() {
   if (!existingLearningCard || !activeSuggestionPlace) return;
 
   const cards = [...results.children];
-  const firstSourceIndex = cards.findIndex(card => card.textContent.includes('A) Am Markt angebotene Objekte'));
+  const firstSourceIndex = cards.findIndex(card => card.textContent.includes('A) Markt-Vorschauen'));
   if (firstSourceIndex < 0) return;
   cards.slice(firstSourceIndex).forEach(card => card.remove());
   results.insertAdjacentHTML('beforeend', propertySourceCard(activeSuggestionPlace));
@@ -854,6 +875,14 @@ function renderLearningSummary() {
 function parsePrice(value) {
   const cleaned = String(value || '').replace(/[^\d]/g, '');
   return cleaned ? Number(cleaned) : null;
+}
+
+function sourceNameFromUrl(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch (error) {
+    return 'Objektquelle';
+  }
 }
 
 function normalizeExternalUrl(value) {
@@ -1010,9 +1039,65 @@ function saveImportedProperty() {
   $('listingPrice').value = '';
   $('listingAddress').value = '';
   $('listingNotes').value = '';
+  updateListingPreview();
   renderProperties();
   updateScoutDashboard();
   status.textContent = 'Objekt bewertet und gespeichert.';
+}
+
+function saveSearchCandidate(button) {
+  if (!selected) {
+    status.textContent = 'Bitte zuerst einen Standort oder ein Suchgebiet wählen.';
+    return;
+  }
+  const property = {
+    id: `prop-${Date.now()}`,
+    kind: 'source_preview',
+    stage: 'manual_review',
+    title: button.dataset.title || 'Suchvorschau',
+    url: normalizeExternalUrl(button.dataset.url),
+    price: null,
+    address: selected.label,
+    notes: button.dataset.notes || 'Aus Suchvorschau gemerkt.',
+    profile: currentProfile(),
+    target: currentTargetSnapshot(),
+    analysis: lastAnalysis,
+    createdAt: new Date().toISOString()
+  };
+  property.score = scoreImportedProperty(property);
+  property.plan = acquisitionPlanFor(property);
+  const properties = storedProperties();
+  properties.unshift(property);
+  writeJson(PROPERTY_KEY, properties.slice(0, 80));
+  renderProperties();
+  updateScoutDashboard();
+  status.textContent = 'Vorschau als Kandidat gespeichert.';
+}
+
+function updateListingPreview() {
+  const preview = $('listingPreview');
+  if (!preview) return;
+  const title = $('listingTitle').value.trim();
+  const url = normalizeExternalUrl($('listingUrl').value);
+  const price = parsePrice($('listingPrice').value);
+  const address = $('listingAddress').value.trim();
+  const notes = $('listingNotes').value.trim();
+
+  if (!title && !url && !address && !notes) {
+    preview.classList.add('hidden');
+    preview.innerHTML = '';
+    return;
+  }
+
+  const displayTitle = title || sourceNameFromUrl(url);
+  const priceText = price == null ? 'Preis offen' : `${price.toLocaleString('de-DE')} €`;
+  preview.classList.remove('hidden');
+  preview.innerHTML = `<div class="sourcePreview pastedPreview">
+    <div class="sourcePreviewTop"><strong>${escapeHtml(displayTitle)}</strong><span>Objekt</span></div>
+    <p>${escapeHtml(address || 'Lage aus Angebot prüfen')} · ${escapeHtml(priceText)}</p>
+    <div class="sourcePreviewMeta">${escapeHtml(notes || 'Noch keine Notizen')}</div>
+    ${url ? `<div class="sourcePreviewActions"><a target="_blank" rel="noopener" href="${escapeHtml(url)}">Original öffnen</a></div>` : ''}
+  </div>`;
 }
 
 function propertyCard(property) {
@@ -1325,6 +1410,13 @@ $('clearLearningBtn').onclick = () => {
 };
 $('saveListingBtn').onclick = saveImportedProperty;
 $('exportDataBtn').onclick = exportDossier;
+['listingTitle', 'listingUrl', 'listingPrice', 'listingAddress', 'listingNotes'].forEach(id => {
+  $(id).addEventListener('input', updateListingPreview);
+});
+document.addEventListener('click', event => {
+  const button = event.target.closest('.saveSearchCandidate');
+  if (button) saveSearchCandidate(button);
+});
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 renderLearningSummary();
