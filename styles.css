@@ -353,6 +353,10 @@ label {
   font-size: 13px;
   line-height: 1.35;
 }
+#parseListingBtn {
+  width: 100%;
+  margin-top: 8px;
+}
 input[type=range],
 select {
   width: 100%;

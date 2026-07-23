@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-  <link rel="stylesheet" href="styles.css?v=20260723-swipe-undo" />
+  <link rel="stylesheet" href="styles.css?v=20260723-text-import-2" />
 </head>
 <body>
   <header>
@@ -81,6 +81,8 @@
         <summary>Objektlink einfügen</summary>
         <label>Titel <input id="listingTitle" placeholder="z. B. Alter Hof mit Nebengebäude" /></label>
         <label>Link zum Angebot <input id="listingUrl" inputmode="url" placeholder="https://..." /></label>
+        <label>Angebotstext <textarea id="listingRawText" rows="4" placeholder="Text aus dem Angebot einfügen. Preis, Wohnfläche, Grundstück, Link und Bildlinks werden erkannt."></textarea></label>
+        <button id="parseListingBtn" class="secondary" type="button">Aus Text erkennen</button>
         <label>Bildlinks <textarea id="listingImages" rows="2" placeholder="1-2 Bild-URLs aus dem Angebot, je Zeile ein Bild"></textarea></label>
         <label>Preis <input id="listingPrice" inputmode="numeric" placeholder="z. B. 850000" /></label>
         <label>Wohnfläche <input id="listingLiving" inputmode="numeric" placeholder="z. B. 210 m²" /></label>
@@ -134,6 +136,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
-  <script src="app.js?v=20260723-swipe-undo"></script>
+  <script src="app.js?v=20260723-text-import-2"></script>
 </body>
 </html>

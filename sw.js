@@ -1,9 +1,9 @@
-const CACHE = 'alpenfinder-v14';
+const CACHE = 'alpenfinder-v16';
 const CORE = [
   './',
   'index.html',
-  'styles.css?v=20260723-swipe-undo',
-  'app.js?v=20260723-swipe-undo',
+  'styles.css?v=20260723-text-import-2',
+  'app.js?v=20260723-text-import-2',
   'manifest.webmanifest',
   'icon.svg',
   'icon-192.png',

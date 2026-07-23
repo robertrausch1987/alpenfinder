@@ -1113,6 +1113,17 @@ function parseArea(value) {
   return cleaned ? Number(cleaned) : null;
 }
 
+function parseLooseNumber(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (/,/.test(raw) && !/\.\d{3}/.test(raw)) {
+    const decimal = Number(raw.replace(/[^\d,]/g, '').replace(',', '.'));
+    return Number.isFinite(decimal) ? decimal : null;
+  }
+  const integer = Number(raw.replace(/[^\d]/g, ''));
+  return Number.isFinite(integer) && integer > 0 ? integer : null;
+}
+
 function sourceNameFromUrl(url) {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
@@ -1145,6 +1156,100 @@ function imageUrlsFromInput(value) {
     .slice(0, 2);
 }
 
+function isLikelyImageUrl(url) {
+  return /\.(jpe?g|png|webp)([?#].*)?$/i.test(url) || /\/(images?|photos?|media|cdn)\//i.test(url);
+}
+
+function extractAreaByLabel(text, labels) {
+  for (const label of labels) {
+    const after = new RegExp(`${label}[^\\d]{0,30}([\\d.,'\\s]+)\\s*(ha|m²|m2|mq|qm)`, 'i').exec(text);
+    const before = new RegExp(`([\\d.,'\\s]+)\\s*(ha|m²|m2|mq|qm)[^\\n]{0,30}${label}`, 'i').exec(text);
+    const match = after || before;
+    if (match) {
+      const value = parseLooseNumber(match[1]);
+      if (!value) continue;
+      return /^ha$/i.test(match[2]) ? Math.round(value * 10000) : Math.round(value);
+    }
+  }
+  return null;
+}
+
+function extractListingFacts(text) {
+  const raw = String(text || '');
+  const lines = raw.split(/\n+/).map(line => line.trim()).filter(Boolean);
+  const urls = [...raw.matchAll(/https?:\/\/[^\s)"'<]+/g)]
+    .map(match => normalizeExternalUrl(match[0].replace(/[.,;:!?]+$/, '')))
+    .filter(Boolean);
+  const imageUrls = urls.filter(isLikelyImageUrl).slice(0, 2);
+  const offerUrl = urls.find(url => !imageUrls.includes(url)) || urls[0] || '';
+  const priceMatches = [
+    ...raw.matchAll(/(?:€|eur|euro)\s*([\d][\d.'\s]*)/gi),
+    ...raw.matchAll(/([\d][\d.'\s]*)\s*(?:€|eur|euro)/gi),
+    ...raw.matchAll(/(?:preis|price|prezzo)[^\d]{0,24}([\d][\d.'\s]*)/gi)
+  ]
+    .map(match => parseLooseNumber(match[1]))
+    .filter(value => value && value > 10000);
+  const title = lines.find(line =>
+    line.length >= 8 &&
+    line.length <= 90 &&
+    !/^https?:\/\//i.test(line) &&
+    !/(preis|price|€|eur|wohnfläche|grundstück|superficie|terreno|m²|mq)/i.test(line)
+  ) || '';
+  const addressLine = lines.find(line =>
+    /(adresse|ort|lage|comune|località|localita|südtirol|alto adige|bozen|meran|passeier|dolomiten)/i.test(line) &&
+    !/^https?:\/\//i.test(line)
+  ) || '';
+
+  return {
+    title,
+    url: offerUrl,
+    imageUrls,
+    price: priceMatches[0] || null,
+    livingArea: extractAreaByLabel(raw, ['wohnfläche', 'wohnfl\\.?', 'abitabile', 'superficie abitabile', 'living area']),
+    plotArea: extractAreaByLabel(raw, ['grundstück', 'grundstücksfläche', 'grund', 'terreno', 'lotto', 'plot']),
+    address: addressLine.replace(/^(adresse|ort|lage|comune|località|localita)\s*[:\-]\s*/i, ''),
+    notes: lines.slice(0, 6).join(' · ').slice(0, 280)
+  };
+}
+
+function fillIfBlank(id, value) {
+  if (value == null || value === '') return;
+  const field = $(id);
+  if (!field || field.value.trim()) return;
+  field.value = String(value);
+}
+
+function applyParsedListingText() {
+  const rawField = $('listingRawText');
+  const text = rawField?.value.trim() || '';
+  if (!text) {
+    status.textContent = 'Bitte zuerst Angebotstext einfügen.';
+    return;
+  }
+  const facts = extractListingFacts(text);
+  fillIfBlank('listingTitle', facts.title);
+  fillIfBlank('listingUrl', facts.url);
+  fillIfBlank('listingPrice', facts.price);
+  fillIfBlank('listingLiving', facts.livingArea);
+  fillIfBlank('listingPlot', facts.plotArea);
+  fillIfBlank('listingAddress', facts.address);
+  fillIfBlank('listingNotes', facts.notes);
+  if (facts.imageUrls.length && !$('listingImages').value.trim()) {
+    $('listingImages').value = facts.imageUrls.join('\n');
+  }
+  updateListingPreview();
+  const found = [
+    facts.price ? 'Preis' : '',
+    facts.livingArea ? 'Wohnfläche' : '',
+    facts.plotArea ? 'Grundstück' : '',
+    facts.imageUrls.length ? 'Bilder' : '',
+    facts.url ? 'Link' : ''
+  ].filter(Boolean);
+  status.textContent = found.length
+    ? `Erkannt: ${found.join(', ')}. Bitte gegen das Original prüfen.`
+    : 'Noch nichts Sicheres erkannt. Bitte Felder manuell ergänzen.';
+}
+
 function profileFitFromText(text) {
   const words = String(text || '').toLowerCase();
   let score = 0;
@@ -1171,7 +1276,10 @@ function scoreImportedProperty(property) {
   )));
   const sunScore = Math.round(Math.max(20, Math.min(98, analysis.winter ? analysis.winter / 8 * 82 : 48)));
   const plotScore = Math.round(Math.max(20, Math.min(96,
-    48 + (analysis.slope != null && analysis.slope <= Number($('slopeMax').value) ? 16 : -8) + (analysis.waterHint ? 10 : 0)
+    48 +
+    (analysis.slope != null && analysis.slope <= Number($('slopeMax').value) ? 16 : -8) +
+    (analysis.waterHint ? 10 : 0) +
+    (property.plotArea >= 10000 ? 14 : property.plotArea ? 5 : 0)
   )));
   const characterScore = Math.round(Math.max(15, Math.min(98, 52 + textScore * 1.5)));
   const accessScore = Math.round(Math.max(15, Math.min(95,
@@ -1179,7 +1287,16 @@ function scoreImportedProperty(property) {
   )));
   const legalScore = property.kind === 'off_market_region' ? 28 : 44;
   const priceScore = Math.round(Math.max(20, Math.min(90, price == null ? 42 : price < 1200000 ? 76 : price < 2200000 ? 58 : 38)));
-  const dataQuality = Math.max(25, Math.min(90, 42 + (property.url ? 15 : 0) + (property.address ? 12 : 0) + (price != null ? 10 : 0) + (analysis.score ? 11 : 0)));
+  const dataQuality = Math.max(25, Math.min(94,
+    42 +
+    (property.url ? 15 : 0) +
+    (property.address ? 10 : 0) +
+    (price != null ? 9 : 0) +
+    (property.imageUrls?.length ? 7 : 0) +
+    (property.livingArea ? 5 : 0) +
+    (property.plotArea ? 7 : 0) +
+    (analysis.score ? 9 : 0)
+  ));
   const breakdown = {
     panorama: panoramaScore,
     sun: sunScore,
@@ -1322,6 +1439,7 @@ function saveImportedProperty() {
   writeJson(PROPERTY_KEY, properties.slice(0, 80));
   $('listingTitle').value = '';
   $('listingUrl').value = '';
+  $('listingRawText').value = '';
   $('listingImages').value = '';
   $('listingPrice').value = '';
   $('listingLiving').value = '';
@@ -1956,6 +2074,7 @@ $('clearLearningBtn').onclick = () => {
   updateScoutDashboard();
 };
 $('saveListingBtn').onclick = saveImportedProperty;
+$('parseListingBtn').onclick = applyParsedListingText;
 $('exportDataBtn').onclick = exportDossier;
 $('autoModeBtn').onclick = () => setScoutMode('auto');
 $('regionModeBtn').onclick = () => setScoutMode('regions');
