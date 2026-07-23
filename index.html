@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-  <link rel="stylesheet" href="styles.css?v=20260723-segments" />
+  <link rel="stylesheet" href="styles.css?v=20260723-agent-audit" />
 </head>
 <body>
   <header>
@@ -100,20 +100,20 @@
         <summary>Wunschobjekt definieren</summary>
         <label class="toggleLine"><input id="refugeMode" type="checkbox" checked /> Bergrefugium-Modus</label>
         <div class="profileNote">Fokus: ultimatives Bergpanorama, maximale Naturkulisse, Rückzugsort. Keine Luxusvilla.</div>
-        <label>Wohnfläche min. <input id="livingMin" type="number" inputmode="numeric" min="0" step="10" placeholder="z. B. 90" /></label>
-        <label>Grundstück min. <input id="plotMin" type="number" inputmode="numeric" min="0" step="50" placeholder="z. B. 800" /></label>
+        <label>Wohnfläche min. <input id="livingMin" type="number" inputmode="numeric" min="0" step="10" value="170" placeholder="z. B. 170" /></label>
+        <label>Grundstück min. <input id="plotMin" type="number" inputmode="numeric" min="0" step="50" value="10000" placeholder="z. B. 10000" /></label>
         <label>Gebäudeart
           <select id="buildingType">
             <option value="">egal</option>
             <option value="Haus">Haus</option>
             <option value="Bauernhof">Bauernhof</option>
-            <option value="Hofstelle">Hofstelle</option>
+            <option value="Hofstelle" selected>Hofstelle</option>
             <option value="Grundstück">Grundstück</option>
             <option value="Chalet">Chalet</option>
           </select>
         </label>
-        <label>Baujahr ab <input id="yearFrom" type="number" inputmode="numeric" min="1600" max="2100" step="1" placeholder="z. B. 1970" /></label>
-        <label>Lagewunsch <input id="locationPref" placeholder="ruhig, alleinlage, bergblick..." /></label>
+        <label>Baujahr ab <input id="yearFrom" type="number" inputmode="numeric" min="1600" max="2100" step="1" value="1800" placeholder="z. B. 1800" /></label>
+        <label>Lagewunsch <input id="locationPref" value="ruhig, panorama, alleinlage, natur, nicht luxuriös" placeholder="ruhig, alleinlage, bergblick..." /></label>
       </details>
       <details>
         <summary>Gelerntes Suchprofil</summary>
@@ -127,6 +127,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
-  <script src="app.js?v=20260723-segments"></script>
+  <script src="app.js?v=20260723-agent-audit"></script>
 </body>
 </html>

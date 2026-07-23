@@ -1,6 +1,6 @@
 # Backlog, Data Model, Data Sources
 
-Stand: 2026-07-22
+Stand: 2026-07-23
 
 ## Priorisiertes Product Backlog
 
@@ -174,7 +174,7 @@ Wichtige Statusfelder:
 
 Aktueller Prototyp-Stand:
 
-- Diese Phase ist teilweise clientseitig umgesetzt: Ein oeffentliches Angebot kann manuell erfasst, mit der zuletzt analysierten Kartenlage gespeichert, erklaerbar bewertet, in eine lokale Kandidatenliste aufgenommen und per Status/Feedback weiterqualifiziert werden.
+- Diese Phase ist teilweise clientseitig umgesetzt: Ein oeffentliches Angebot kann manuell erfasst, mit der zuletzt analysierten Kartenlage gespeichert, erklaerbar bewertet, in eine lokale Kandidatenliste aufgenommen und per Status sowie Robert/Partnerin-Feedback weiterqualifiziert werden.
 - Noch nicht umgesetzt: zentraler Objektbestand, echter Quellenimport, Backend-API, gemeinsame Nutzung durch zwei Personen, Dubletten, Preis-/Baurechts-/Eigentumsdaten und belastbare Off-Market-Erkennung.
 
 ### Phase 2: Quellen und Persistenz

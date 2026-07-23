@@ -404,6 +404,25 @@ input[type=range] {
   color: var(--accent);
   font-weight: 800;
 }
+.scoreBreakdown {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.scoreBreakdown span {
+  display: grid;
+  gap: 2px;
+  background: #f4f1e9;
+  border-radius: 9px;
+  padding: 7px 6px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+.scoreBreakdown strong {
+  color: #706d65;
+  font-size: 10px;
+}
 .miniList {
   display: flex;
   flex-wrap: wrap;
@@ -433,6 +452,30 @@ input[type=range] {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+}
+.householdVotes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.householdVotes div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  background: #f4f1e9;
+  border-radius: 9px;
+  padding: 8px;
+  font-size: 12px;
+}
+.voteActions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.voteActions button {
+  min-width: 0;
+  padding: 8px 6px;
+  font-size: 11px;
 }
 .propertyActions button {
   min-width: 0;
@@ -623,6 +666,8 @@ input[type=range] {
   .learnStats { grid-template-columns: 1fr; }
   .scoutStats,
   .scoutActions { grid-template-columns: 1fr 1fr; }
+  .scoreBreakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .voteActions { grid-template-columns: 1fr 1fr; }
   .propertyActions { grid-template-columns: 1fr; }
   .cardRow { align-items: flex-start; }
   .actions button { min-width: 0; }

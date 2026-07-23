@@ -1,6 +1,6 @@
 # Alpenfinder Current-State Audit
 
-Stand: 2026-07-22
+Stand: 2026-07-23
 
 ## Kurzfazit
 
@@ -85,6 +85,7 @@ Grenzen:
 Vorhanden:
 
 - Mobile Kartenansicht.
+- A/B-Startlogik fuer automatische Vorschlagsregionen und eigene Regionen.
 - Seitenpanel fuer Standortanalyse.
 - Kriterien und Wunschobjektprofil.
 - Lernprofil.

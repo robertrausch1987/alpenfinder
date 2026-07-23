@@ -1138,7 +1138,42 @@ function scoreImportedProperty(property) {
   const price = property.price;
   const priceSignal = price == null ? 0 : price < 1200000 ? 8 : price < 2200000 ? 2 : -8;
   const dataPenalty = property.url ? 0 : -6;
-  const score = Math.round(Math.max(0, Math.min(100, geoScore * 0.62 + 22 + textScore + priceSignal + dataPenalty)));
+  const panoramaScore = Math.round(Math.max(20, Math.min(98,
+    46 + textScore + (analysis.aspect && ['S', 'SE', 'SW'].includes(analysis.aspect) ? 12 : 0) + (analysis.elevation ? 8 : 0)
+  )));
+  const sunScore = Math.round(Math.max(20, Math.min(98, analysis.winter ? analysis.winter / 8 * 82 : 48)));
+  const plotScore = Math.round(Math.max(20, Math.min(96,
+    48 + (analysis.slope != null && analysis.slope <= Number($('slopeMax').value) ? 16 : -8) + (analysis.waterHint ? 10 : 0)
+  )));
+  const characterScore = Math.round(Math.max(15, Math.min(98, 52 + textScore * 1.5)));
+  const accessScore = Math.round(Math.max(15, Math.min(95,
+    analysis.road == null ? 42 : 82 - Math.min(38, analysis.road / 20)
+  )));
+  const legalScore = property.kind === 'off_market_region' ? 28 : 44;
+  const priceScore = Math.round(Math.max(20, Math.min(90, price == null ? 42 : price < 1200000 ? 76 : price < 2200000 ? 58 : 38)));
+  const dataQuality = Math.max(25, Math.min(90, 42 + (property.url ? 15 : 0) + (property.address ? 12 : 0) + (price != null ? 10 : 0) + (analysis.score ? 11 : 0)));
+  const breakdown = {
+    panorama: panoramaScore,
+    sun: sunScore,
+    plot: plotScore,
+    character: characterScore,
+    access: accessScore,
+    legal: legalScore,
+    price: priceScore,
+    dataQuality
+  };
+  const score = Math.round(Math.max(0, Math.min(100,
+    geoScore * 0.35 +
+    breakdown.panorama * 0.16 +
+    breakdown.sun * 0.12 +
+    breakdown.plot * 0.11 +
+    breakdown.character * 0.12 +
+    breakdown.access * 0.08 +
+    breakdown.price * 0.04 +
+    breakdown.legal * 0.02 +
+    priceSignal +
+    dataPenalty
+  )));
   const strengths = [];
   const risks = [];
   const next = [];
@@ -1161,7 +1196,8 @@ function scoreImportedProperty(property) {
 
   return {
     total: score,
-    dataQuality: Math.max(25, Math.min(90, 42 + (property.url ? 15 : 0) + (property.address ? 12 : 0) + (price != null ? 10 : 0) + (analysis.score ? 11 : 0))),
+    dataQuality,
+    breakdown,
     strengths: strengths.length ? strengths : ['erste Vorqualifizierung möglich'],
     risks: risks.length ? risks : ['keine harten Dealbreaker aus dem Prototyp erkennbar'],
     next
@@ -1316,6 +1352,38 @@ function updateListingPreview() {
   </div>`;
 }
 
+function scoreBreakdown(property) {
+  const breakdown = property.score?.breakdown || {};
+  const items = [
+    ['Panorama', breakdown.panorama],
+    ['Sonne', breakdown.sun],
+    ['Grundstück', breakdown.plot],
+    ['Charakter', breakdown.character],
+    ['Erreichbarkeit', breakdown.access],
+    ['Recht/offen', breakdown.legal],
+    ['Preis', breakdown.price],
+    ['Daten', breakdown.dataQuality]
+  ];
+  return `<div class="scoreBreakdown">${items.map(([label, value]) => `
+    <span><strong>${escapeHtml(label)}</strong>${Number.isFinite(value) ? Math.round(value) : 'unklar'}</span>
+  `).join('')}</div>`;
+}
+
+function householdVoteSummary(property) {
+  const votes = property.votes || {};
+  const labelFor = vote => {
+    if (!vote) return 'offen';
+    if (vote.fit === 'love') return 'Top';
+    if (vote.fit === 'maybe') return 'Prüfen';
+    if (vote.fit === 'no') return 'Nein';
+    return 'offen';
+  };
+  return `<div class="householdVotes">
+    <div><strong>Robert</strong><span>${escapeHtml(labelFor(votes.robert))}</span></div>
+    <div><strong>Partnerin</strong><span>${escapeHtml(labelFor(votes.partner))}</span></div>
+  </div>`;
+}
+
 function propertyCard(property) {
   const price = property.price == null ? 'Preis offen' : `${property.price.toLocaleString('de-DE')} €`;
   const source = property.url ? `<a target="_blank" rel="noopener" href="${escapeHtml(property.url)}">Quelle öffnen</a>` : '<span>Quelle fehlt</span>';
@@ -1324,9 +1392,19 @@ function propertyCard(property) {
     <div class="cardRow"><strong>${escapeHtml(property.title)}</strong><span class="badge ${property.score.total >= 75 ? 'good' : property.score.total >= 55 ? 'warn' : 'bad'}">${property.score.total}/100</span></div>
     <div class="muted">${escapeHtml(property.address || property.target?.label || 'Lage offen')} · ${escapeHtml(price)} · Datenqualität ${property.score.dataQuality}/100</div>
     <div class="propertyMeta">${source}<span>${escapeHtml(property.stage)}</span></div>
+    ${scoreBreakdown(property)}
     <div class="miniList"><strong>Stärken</strong>${property.score.strengths.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>
     <div class="miniList"><strong>Risiken/offen</strong>${property.score.risks.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>
     <div class="nextPlan"><strong>Nächste Prüfungen</strong>${plan.map(item => `<span>${escapeHtml(item.title)} · ${escapeHtml(item.status)}</span>`).join('')}</div>
+    ${householdVoteSummary(property)}
+    <div class="voteActions">
+      <button type="button" onclick="voteProperty('${property.id}','robert','love')">Robert Top</button>
+      <button type="button" class="secondary" onclick="voteProperty('${property.id}','robert','maybe')">Robert prüfen</button>
+      <button type="button" class="secondary" onclick="voteProperty('${property.id}','robert','no')">Robert nein</button>
+      <button type="button" onclick="voteProperty('${property.id}','partner','love')">Partnerin Top</button>
+      <button type="button" class="secondary" onclick="voteProperty('${property.id}','partner','maybe')">Partnerin prüfen</button>
+      <button type="button" class="secondary" onclick="voteProperty('${property.id}','partner','no')">Partnerin nein</button>
+    </div>
     <div class="propertyActions">
       <button type="button" onclick="markProperty('${property.id}','interesting')">Interessant</button>
       <button type="button" class="secondary" onclick="markProperty('${property.id}','manual_review')">Prüfen</button>
@@ -1368,6 +1446,42 @@ window.markProperty = (id, stage) => {
     writeJson(PROPERTY_KEY, properties);
     status.textContent = `Objektstatus aktualisiert: ${stage}.`;
   }
+  renderProperties();
+  updateScoutDashboard();
+};
+
+window.voteProperty = (id, person, fit) => {
+  const properties = readJson(PROPERTY_KEY, []);
+  const property = properties.find(item => item.id === id);
+  if (!property) return;
+  const normalizedPerson = person === 'partner' ? 'partner' : 'robert';
+  const voteFit = ['love', 'maybe', 'no'].includes(fit) ? fit : 'maybe';
+  property.votes = property.votes || {};
+  property.votes[normalizedPerson] = {
+    fit: voteFit,
+    date: new Date().toISOString()
+  };
+  property.updatedAt = new Date().toISOString();
+
+  const both = property.votes.robert?.fit === 'love' && property.votes.partner?.fit === 'love';
+  if (both) {
+    property.stage = 'interesting';
+    property.plan = acquisitionPlanFor(property);
+  }
+
+  writeJson(PROPERTY_KEY, properties);
+  applyFeedbackLearning({
+    title: property.title,
+    url: property.url,
+    fit: voteFit === 'no' ? 'negative' : voteFit === 'maybe' ? 'maybe' : 'positive',
+    comment: `${normalizedPerson === 'robert' ? 'Robert' : 'Partnerin'}: ${voteFit === 'love' ? 'unbedingt weiterverfolgen' : voteFit === 'maybe' ? 'prüfen' : 'passt nicht'}`,
+    place: property.target?.label || property.address || '',
+    target: property.target,
+    date: new Date().toISOString()
+  });
+  status.textContent = both
+    ? 'Beide finden das Objekt stark. Es wurde als interessant markiert.'
+    : 'Votum gespeichert. Das Suchprofil lernt daraus.';
   renderProperties();
   updateScoutDashboard();
 };

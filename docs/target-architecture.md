@@ -1,6 +1,6 @@
 # Alpenfinder Target Architecture
 
-Stand: 2026-07-22
+Stand: 2026-07-23
 
 ## Zielbild
 
