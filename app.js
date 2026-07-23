@@ -45,6 +45,7 @@ const LEARNING_KEY = 'alpenLearningProfile';
 const PROPERTY_KEY = 'alpenProperties';
 const REGION_KEY = 'alpenRegions';
 const SCOUT_MODE_KEY = 'alpenScoutMode';
+const LAST_REVIEW_KEY = 'alpenLastSwipeReview';
 
 const AUTO_REGION_SUGGESTIONS = [
   {
@@ -915,8 +916,7 @@ function updateBucket(bucket, words, weight) {
   }
 }
 
-function applyFeedbackLearning(entry) {
-  const profile = loadLearningProfile();
+function accumulateLearningEntry(profile, entry) {
   const titleAndComment = `${entry.title} ${entry.comment}`;
   const commentOnly = entry.comment || entry.title;
   const words = normalizedWords(entry.fit === 'negative' ? commentOnly : titleAndComment);
@@ -927,8 +927,23 @@ function applyFeedbackLearning(entry) {
   if (entry.fit === 'negative' && /zu wenig grundst|mehr grundst/i.test(commentOnly)) {
     updateBucket(profile.positive, ['grundstück'], 1);
   }
+}
+
+function applyFeedbackLearning(entry) {
+  const profile = loadLearningProfile();
+  accumulateLearningEntry(profile, entry);
   profile.entries.unshift(entry);
   saveLearningProfile(profile);
+}
+
+function removeLearningEntry(entryId) {
+  if (!entryId) return;
+  const current = loadLearningProfile();
+  const entries = current.entries.filter(entry => entry.id !== entryId);
+  const rebuilt = emptyLearningProfile();
+  for (const entry of entries) accumulateLearningEntry(rebuilt, entry);
+  rebuilt.entries = entries.slice(0, 80);
+  saveLearningProfile(rebuilt);
 }
 
 function learnedQuery(profile, place) {
@@ -1473,16 +1488,27 @@ function nextSwipeProperty() {
   );
 }
 
+function lastSwipeReview() {
+  return readJson(LAST_REVIEW_KEY, null);
+}
+
+function swipeUndoButton() {
+  return lastSwipeReview()
+    ? '<button type="button" class="ghost undoSwipeBtn">Letzte Entscheidung zurücknehmen</button>'
+    : '';
+}
+
 function renderSwipeDeck() {
   const target = $('swipeDeck');
   if (!target) return;
   const property = nextSwipeProperty();
   if (!property) {
-    target.innerHTML = '<div class="muted">Keine offenen Objektvorschauen. Neue Kandidaten erscheinen hier automatisch.</div>';
+    target.innerHTML = `<div class="muted">Keine offenen Objektvorschauen. Neue Kandidaten erscheinen hier automatisch.</div>${swipeUndoButton()}`;
     return;
   }
 
   const source = property.url ? `<a target="_blank" rel="noopener" href="${escapeHtml(property.url)}">Original öffnen</a>` : '<span>Quelle fehlt</span>';
+  const reasonChips = ['Panorama stark', 'gute Grundstücksgröße', 'schöne Wiese', 'Nebengebäude spannend', 'wirkt zu touristisch', 'zu modern', 'zu steil', 'zu teuer', 'zu wenig Privatsphäre', 'falsche Lage'];
   target.innerHTML = `<article class="swipeCard" data-property-id="${escapeHtml(property.id)}">
     ${imageStrip(property.imageUrls, property.title)}
     <div class="swipeHead">
@@ -1495,12 +1521,15 @@ function renderSwipeDeck() {
     ${scoreBreakdown(property)}
     <p>${escapeHtml(property.notes || 'Noch keine Notiz. Original prüfen und Eindruck bewerten.')}</p>
     <div class="propertyMeta">${source}<span>${escapeHtml(property.kind || 'Kandidat')}</span></div>
+    <div class="reasonChips">${reasonChips.map(reason => `<button type="button" class="swipeReasonChip" data-property-id="${escapeHtml(property.id)}" data-reason="${escapeHtml(reason)}">${escapeHtml(reason)}</button>`).join('')}</div>
     <label>Warum? <textarea id="swipeReason-${escapeHtml(property.id)}" rows="2" placeholder="optional: z. B. tolle Lage, zu touristisch, zu steil, falsches Haus..."></textarea></label>
     <div class="swipeActions">
       <button type="button" class="secondary swipeDecision" data-property-id="${escapeHtml(property.id)}" data-fit="negative">← Uninteressant</button>
+      <button type="button" class="secondary swipeDecision" data-property-id="${escapeHtml(property.id)}" data-fit="skip">Später</button>
       <button type="button" class="swipeDecision" data-property-id="${escapeHtml(property.id)}" data-fit="positive">Interessant →</button>
     </div>
     <div class="swipeHint">Auf dem Handy kann die Karte auch nach links oder rechts gewischt werden.</div>
+    ${swipeUndoButton()}
   </article>`;
   bindSwipeGesture();
 }
@@ -1611,17 +1640,39 @@ function reviewPropertyQuick(id, fit) {
   const property = properties.find(item => item.id === id);
   if (!property) return;
   const reason = $(`swipeReason-${id}`)?.value.trim() || '';
+  const reviewId = `review-${Date.now()}`;
+  writeJson(LAST_REVIEW_KEY, {
+    property: { ...property },
+    reviewId,
+    date: new Date().toISOString()
+  });
+  if (fit === 'skip') {
+    property.stage = 'manual_review';
+    property.quickReview = {
+      fit: 'later',
+      reason,
+      date: new Date().toISOString()
+    };
+    property.updatedAt = new Date().toISOString();
+    writeJson(PROPERTY_KEY, properties);
+    status.textContent = 'Für später zurückgelegt. Noch kein Lernsignal gespeichert.';
+    renderProperties();
+    updateScoutDashboard();
+    return;
+  }
   const isPositive = fit === 'positive';
   property.stage = isPositive ? 'interesting' : 'rejected';
   property.quickReview = {
     fit: isPositive ? 'interesting' : 'uninteresting',
     reason,
+    reviewId,
     date: new Date().toISOString()
   };
   property.updatedAt = new Date().toISOString();
   if (isPositive) property.plan = acquisitionPlanFor(property);
   writeJson(PROPERTY_KEY, properties);
   applyFeedbackLearning({
+    id: reviewId,
     title: property.title,
     url: property.url,
     fit: isPositive ? 'positive' : 'negative',
@@ -1638,6 +1689,26 @@ function reviewPropertyQuick(id, fit) {
 }
 
 window.reviewPropertyQuick = reviewPropertyQuick;
+
+function undoLastSwipeReview() {
+  const last = lastSwipeReview();
+  if (!last?.property) {
+    status.textContent = 'Keine Swipe-Entscheidung zum Zurücknehmen vorhanden.';
+    return;
+  }
+  const properties = readJson(PROPERTY_KEY, []);
+  const index = properties.findIndex(property => property.id === last.property.id);
+  if (index >= 0) properties[index] = last.property;
+  else properties.unshift(last.property);
+  writeJson(PROPERTY_KEY, properties);
+  removeLearningEntry(last.reviewId);
+  localStorage.removeItem(LAST_REVIEW_KEY);
+  status.textContent = 'Letzte Swipe-Entscheidung zurückgenommen.';
+  renderProperties();
+  updateScoutDashboard();
+}
+
+window.undoLastSwipeReview = undoLastSwipeReview;
 
 async function analyzeSamples(samplePoints, center, radius, label, areaDescription = '') {
   const terrainResults = await Promise.allSettled(
@@ -1911,8 +1982,21 @@ document.addEventListener('click', event => {
   const candidateButton = event.target.closest('.createRegionCandidateBtn');
   if (candidateButton) createRegionCandidate(findRegionById(candidateButton.dataset.regionId));
 
+  const reasonChip = event.target.closest('.swipeReasonChip');
+  if (reasonChip) {
+    const reasonInput = $(`swipeReason-${reasonChip.dataset.propertyId}`);
+    if (reasonInput) {
+      const reason = reasonChip.dataset.reason || '';
+      reasonInput.value = reasonInput.value ? `${reasonInput.value}, ${reason}` : reason;
+      reasonInput.focus();
+    }
+  }
+
   const swipeButton = event.target.closest('.swipeDecision');
   if (swipeButton) reviewPropertyQuick(swipeButton.dataset.propertyId, swipeButton.dataset.fit);
+
+  const undoSwipeButton = event.target.closest('.undoSwipeBtn');
+  if (undoSwipeButton) undoLastSwipeReview();
 });
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');

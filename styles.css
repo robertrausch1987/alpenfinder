@@ -433,8 +433,25 @@ input[type=range] {
 }
 .swipeActions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr .72fr 1fr;
   gap: 8px;
+}
+.reasonChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.reasonChips button {
+  background: #ebe6da;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+.undoSwipeBtn {
+  width: 100%;
+  color: #706d65;
+  font-size: 13px;
 }
 .propertyImageStrip {
   display: grid;
