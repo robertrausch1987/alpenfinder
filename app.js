@@ -1093,6 +1093,11 @@ function parsePrice(value) {
   return cleaned ? Number(cleaned) : null;
 }
 
+function parseArea(value) {
+  const cleaned = String(value || '').replace(/[^\d]/g, '');
+  return cleaned ? Number(cleaned) : null;
+}
+
 function sourceNameFromUrl(url) {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
@@ -1115,6 +1120,14 @@ function normalizeExternalUrl(value) {
       return '';
     }
   }
+}
+
+function imageUrlsFromInput(value) {
+  return String(value || '')
+    .split(/[\n,]+/)
+    .map(item => normalizeExternalUrl(item))
+    .filter(Boolean)
+    .slice(0, 2);
 }
 
 function profileFitFromText(text) {
@@ -1253,7 +1266,10 @@ function currentTargetSnapshot() {
 function saveImportedProperty() {
   const title = $('listingTitle').value.trim();
   const url = normalizeExternalUrl($('listingUrl').value);
+  const imageUrls = imageUrlsFromInput($('listingImages').value);
   const price = parsePrice($('listingPrice').value);
+  const livingArea = parseArea($('listingLiving').value);
+  const plotArea = parseArea($('listingPlot').value);
   const address = $('listingAddress').value.trim();
   const notes = $('listingNotes').value.trim();
 
@@ -1272,7 +1288,10 @@ function saveImportedProperty() {
     stage: 'auto_scored',
     title: title || 'Öffentliches Angebot',
     url,
+    imageUrls,
     price,
+    livingArea,
+    plotArea,
     address,
     notes,
     profile: currentProfile(),
@@ -1288,7 +1307,10 @@ function saveImportedProperty() {
   writeJson(PROPERTY_KEY, properties.slice(0, 80));
   $('listingTitle').value = '';
   $('listingUrl').value = '';
+  $('listingImages').value = '';
   $('listingPrice').value = '';
+  $('listingLiving').value = '';
+  $('listingPlot').value = '';
   $('listingAddress').value = '';
   $('listingNotes').value = '';
   updateListingPreview();
@@ -1326,16 +1348,40 @@ function saveSearchCandidate(button) {
   status.textContent = 'Vorschau als Kandidat gespeichert.';
 }
 
+function imageStrip(imageUrls = [], title = 'Objekt') {
+  const images = Array.isArray(imageUrls) ? imageUrls.filter(Boolean).slice(0, 2) : [];
+  if (!images.length) {
+    return `<div class="propertyImagePlaceholder"><span>Bild fehlt</span><strong>${escapeHtml(title)}</strong></div>`;
+  }
+  return `<div class="propertyImageStrip">${images.map((src, index) => `
+    <img src="${escapeHtml(src)}" alt="${escapeHtml(`${title} Bild ${index + 1}`)}" loading="lazy" />
+  `).join('')}</div>`;
+}
+
+function propertyFactLine(property) {
+  const price = property.price == null ? 'Preis offen' : `${property.price.toLocaleString('de-DE')} €`;
+  const facts = [
+    price,
+    property.livingArea ? `${property.livingArea.toLocaleString('de-DE')} m² Wohnfläche` : '',
+    property.plotArea ? `${property.plotArea.toLocaleString('de-DE')} m² Grundstück` : '',
+    property.address || property.target?.label || 'Lage offen'
+  ].filter(Boolean);
+  return facts.join(' · ');
+}
+
 function updateListingPreview() {
   const preview = $('listingPreview');
   if (!preview) return;
   const title = $('listingTitle').value.trim();
   const url = normalizeExternalUrl($('listingUrl').value);
+  const imageUrls = imageUrlsFromInput($('listingImages').value);
   const price = parsePrice($('listingPrice').value);
+  const livingArea = parseArea($('listingLiving').value);
+  const plotArea = parseArea($('listingPlot').value);
   const address = $('listingAddress').value.trim();
   const notes = $('listingNotes').value.trim();
 
-  if (!title && !url && !address && !notes) {
+  if (!title && !url && !imageUrls.length && !address && !notes) {
     preview.classList.add('hidden');
     preview.innerHTML = '';
     return;
@@ -1343,10 +1389,17 @@ function updateListingPreview() {
 
   const displayTitle = title || sourceNameFromUrl(url);
   const priceText = price == null ? 'Preis offen' : `${price.toLocaleString('de-DE')} €`;
+  const facts = [
+    priceText,
+    livingArea ? `${livingArea.toLocaleString('de-DE')} m² Wohnfläche` : '',
+    plotArea ? `${plotArea.toLocaleString('de-DE')} m² Grundstück` : '',
+    address || 'Lage prüfen'
+  ].filter(Boolean).join(' · ');
   preview.classList.remove('hidden');
   preview.innerHTML = `<div class="sourcePreview pastedPreview">
+    ${imageStrip(imageUrls, displayTitle)}
     <div class="sourcePreviewTop"><strong>${escapeHtml(displayTitle)}</strong><span>Objekt</span></div>
-    <p>${escapeHtml(address || 'Lage aus Angebot prüfen')} · ${escapeHtml(priceText)}</p>
+    <p>${escapeHtml(facts)}</p>
     <div class="sourcePreviewMeta">${escapeHtml(notes || 'Noch keine Notizen')}</div>
     ${url ? `<div class="sourcePreviewActions"><a target="_blank" rel="noopener" href="${escapeHtml(url)}">Original öffnen</a></div>` : ''}
   </div>`;
@@ -1385,12 +1438,12 @@ function householdVoteSummary(property) {
 }
 
 function propertyCard(property) {
-  const price = property.price == null ? 'Preis offen' : `${property.price.toLocaleString('de-DE')} €`;
   const source = property.url ? `<a target="_blank" rel="noopener" href="${escapeHtml(property.url)}">Quelle öffnen</a>` : '<span>Quelle fehlt</span>';
   const plan = property.plan || acquisitionPlanFor(property);
   return `<div class="propertyCard">
+    ${imageStrip(property.imageUrls, property.title)}
     <div class="cardRow"><strong>${escapeHtml(property.title)}</strong><span class="badge ${property.score.total >= 75 ? 'good' : property.score.total >= 55 ? 'warn' : 'bad'}">${property.score.total}/100</span></div>
-    <div class="muted">${escapeHtml(property.address || property.target?.label || 'Lage offen')} · ${escapeHtml(price)} · Datenqualität ${property.score.dataQuality}/100</div>
+    <div class="muted">${escapeHtml(propertyFactLine(property))} · Datenqualität ${property.score.dataQuality}/100</div>
     <div class="propertyMeta">${source}<span>${escapeHtml(property.stage)}</span></div>
     ${scoreBreakdown(property)}
     <div class="miniList"><strong>Stärken</strong>${property.score.strengths.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>
@@ -1413,6 +1466,72 @@ function propertyCard(property) {
   </div>`;
 }
 
+function nextSwipeProperty() {
+  return storedProperties().find(property =>
+    !property.quickReview &&
+    !['rejected', 'acquired'].includes(property.stage)
+  );
+}
+
+function renderSwipeDeck() {
+  const target = $('swipeDeck');
+  if (!target) return;
+  const property = nextSwipeProperty();
+  if (!property) {
+    target.innerHTML = '<div class="muted">Keine offenen Objektvorschauen. Neue Kandidaten erscheinen hier automatisch.</div>';
+    return;
+  }
+
+  const source = property.url ? `<a target="_blank" rel="noopener" href="${escapeHtml(property.url)}">Original öffnen</a>` : '<span>Quelle fehlt</span>';
+  target.innerHTML = `<article class="swipeCard" data-property-id="${escapeHtml(property.id)}">
+    ${imageStrip(property.imageUrls, property.title)}
+    <div class="swipeHead">
+      <div>
+        <strong>${escapeHtml(property.title)}</strong>
+        <span>${escapeHtml(propertyFactLine(property))}</span>
+      </div>
+      <b>${property.score.total}/100</b>
+    </div>
+    ${scoreBreakdown(property)}
+    <p>${escapeHtml(property.notes || 'Noch keine Notiz. Original prüfen und Eindruck bewerten.')}</p>
+    <div class="propertyMeta">${source}<span>${escapeHtml(property.kind || 'Kandidat')}</span></div>
+    <label>Warum? <textarea id="swipeReason-${escapeHtml(property.id)}" rows="2" placeholder="optional: z. B. tolle Lage, zu touristisch, zu steil, falsches Haus..."></textarea></label>
+    <div class="swipeActions">
+      <button type="button" class="secondary swipeDecision" data-property-id="${escapeHtml(property.id)}" data-fit="negative">← Uninteressant</button>
+      <button type="button" class="swipeDecision" data-property-id="${escapeHtml(property.id)}" data-fit="positive">Interessant →</button>
+    </div>
+    <div class="swipeHint">Auf dem Handy kann die Karte auch nach links oder rechts gewischt werden.</div>
+  </article>`;
+  bindSwipeGesture();
+}
+
+function bindSwipeGesture() {
+  const card = document.querySelector('.swipeCard');
+  if (!card) return;
+  let startX = 0;
+  let currentX = 0;
+  card.onpointerdown = event => {
+    if (event.target.closest('button, textarea, a')) return;
+    startX = event.clientX;
+    currentX = event.clientX;
+    card.setPointerCapture(event.pointerId);
+  };
+  card.onpointermove = event => {
+    if (!startX) return;
+    currentX = event.clientX;
+    const dx = currentX - startX;
+    card.style.transform = `translateX(${Math.max(-90, Math.min(90, dx))}px) rotate(${dx / 20}deg)`;
+  };
+  card.onpointerup = () => {
+    if (!startX) return;
+    const dx = currentX - startX;
+    card.style.transform = '';
+    startX = 0;
+    currentX = 0;
+    if (Math.abs(dx) > 80) reviewPropertyQuick(card.dataset.propertyId, dx > 0 ? 'positive' : 'negative');
+  };
+}
+
 function renderProperties() {
   const target = $('properties');
   if (!target) return;
@@ -1420,6 +1539,7 @@ function renderProperties() {
   target.innerHTML = properties.length
     ? properties.map(propertyCard).join('')
     : '<div class="muted">Noch keine Objektkandidaten gespeichert.</div>';
+  renderSwipeDeck();
   updateScoutDashboard();
 }
 
@@ -1485,6 +1605,39 @@ window.voteProperty = (id, person, fit) => {
   renderProperties();
   updateScoutDashboard();
 };
+
+function reviewPropertyQuick(id, fit) {
+  const properties = readJson(PROPERTY_KEY, []);
+  const property = properties.find(item => item.id === id);
+  if (!property) return;
+  const reason = $(`swipeReason-${id}`)?.value.trim() || '';
+  const isPositive = fit === 'positive';
+  property.stage = isPositive ? 'interesting' : 'rejected';
+  property.quickReview = {
+    fit: isPositive ? 'interesting' : 'uninteresting',
+    reason,
+    date: new Date().toISOString()
+  };
+  property.updatedAt = new Date().toISOString();
+  if (isPositive) property.plan = acquisitionPlanFor(property);
+  writeJson(PROPERTY_KEY, properties);
+  applyFeedbackLearning({
+    title: property.title,
+    url: property.url,
+    fit: isPositive ? 'positive' : 'negative',
+    comment: reason || (isPositive ? 'Schnellbewertung: interessant' : 'Schnellbewertung: uninteressant'),
+    place: property.target?.label || property.address || '',
+    target: property.target,
+    date: new Date().toISOString()
+  });
+  status.textContent = isPositive
+    ? 'Als interessant gemerkt. Das Warum fließt ins Lernprofil.'
+    : 'Als uninteressant aussortiert. Das Warum fließt ins Lernprofil.';
+  renderProperties();
+  updateScoutDashboard();
+}
+
+window.reviewPropertyQuick = reviewPropertyQuick;
 
 async function analyzeSamples(samplePoints, center, radius, label, areaDescription = '') {
   const terrainResults = await Promise.allSettled(
@@ -1745,7 +1898,7 @@ $('runRegionsBtn').onclick = () => {
   }
   selectRegion(regions[0], { analyze: true });
 };
-['listingTitle', 'listingUrl', 'listingPrice', 'listingAddress', 'listingNotes'].forEach(id => {
+['listingTitle', 'listingUrl', 'listingImages', 'listingPrice', 'listingLiving', 'listingPlot', 'listingAddress', 'listingNotes'].forEach(id => {
   $(id).addEventListener('input', updateListingPreview);
 });
 document.addEventListener('click', event => {
@@ -1757,6 +1910,9 @@ document.addEventListener('click', event => {
 
   const candidateButton = event.target.closest('.createRegionCandidateBtn');
   if (candidateButton) createRegionCandidate(findRegionById(candidateButton.dataset.regionId));
+
+  const swipeButton = event.target.closest('.swipeDecision');
+  if (swipeButton) reviewPropertyQuick(swipeButton.dataset.propertyId, swipeButton.dataset.fit);
 });
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');

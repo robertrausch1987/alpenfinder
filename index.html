@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-  <link rel="stylesheet" href="styles.css?v=20260723-agent-audit" />
+  <link rel="stylesheet" href="styles.css?v=20260723-swipe-preview" />
 </head>
 <body>
   <header>
@@ -81,12 +81,19 @@
         <summary>Objektlink einfügen</summary>
         <label>Titel <input id="listingTitle" placeholder="z. B. Alter Hof mit Nebengebäude" /></label>
         <label>Link zum Angebot <input id="listingUrl" inputmode="url" placeholder="https://..." /></label>
+        <label>Bildlinks <textarea id="listingImages" rows="2" placeholder="1-2 Bild-URLs aus dem Angebot, je Zeile ein Bild"></textarea></label>
         <label>Preis <input id="listingPrice" inputmode="numeric" placeholder="z. B. 850000" /></label>
+        <label>Wohnfläche <input id="listingLiving" inputmode="numeric" placeholder="z. B. 210 m²" /></label>
+        <label>Grundstück <input id="listingPlot" inputmode="numeric" placeholder="z. B. 12000 m²" /></label>
         <label>Adresse / Ort <input id="listingAddress" placeholder="falls im Angebot sichtbar" /></label>
         <label>Notizen <textarea id="listingNotes" rows="3" placeholder="Was fällt auf? Panorama, Zustand, Nebengebäude, Risiken..."></textarea></label>
         <div id="listingPreview" class="listingPreview hidden"></div>
         <button id="saveListingBtn" type="button">Objekt bewerten und speichern</button>
       </details>
+      <section class="swipeDeckSection" aria-label="Objekte schnell bewerten">
+        <div class="cardRow"><h2>Objekt-Swipe</h2><span class="badge good">lernen</span></div>
+        <div id="swipeDeck"></div>
+      </section>
       <div class="properties"><h2>Objektkandidaten</h2><div id="properties"></div></div>
       <details>
         <summary>Bewertungskriterien anpassen</summary>
@@ -127,6 +134,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
-  <script src="app.js?v=20260723-agent-audit"></script>
+  <script src="app.js?v=20260723-swipe-preview"></script>
 </body>
 </html>
